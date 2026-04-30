@@ -10,6 +10,7 @@ E2E_AGENT="${E2E_AGENT:-codex}"
 TMP_WORK=""
 NODE_TMP=""
 DECODE_TMP=""
+CLAUDE_TMP=""
 E2E_DIR=""
 
 usage() {
@@ -111,7 +112,7 @@ pass "version output"
 
 # 3) loglm-decode overlap trimming
 DECODE_TMP="$(/usr/bin/mktemp -d)"
-trap 'rm -rf "$TMP_WORK" "$NODE_TMP" "$DECODE_TMP"' EXIT
+trap 'rm -rf "$TMP_WORK" "$NODE_TMP" "$DECODE_TMP" "$CLAUDE_TMP"' EXIT
 cat > "$DECODE_TMP/loglm-codex-log-20260403-010000-pid1.txt" <<'EOF'
 ===== loglm start [codex]: 2026-04-03 01:00:00 +0900 =====
 
@@ -369,7 +370,7 @@ pass "pii replace-all on grouped candidate input"
 
 # 4) install-node runtime behavior for missing NVM_DIR
 NODE_TMP="$(/usr/bin/mktemp -d)"
-trap 'rm -rf "$TMP_WORK" "$NODE_TMP" "$DECODE_TMP"' EXIT
+trap 'rm -rf "$TMP_WORK" "$NODE_TMP" "$DECODE_TMP" "$CLAUDE_TMP"' EXIT
 mkdir -p "$NODE_TMP/home" "$NODE_TMP/bin"
 
 cat > "$NODE_TMP/bin/curl" <<'EOF'
@@ -431,9 +432,48 @@ assert_exit_code 2 "$st" "invalid repo validation"
 rg -q "Invalid source spec" /tmp/loglm-test-invalid.err || fail "missing invalid source message"
 pass "invalid repo check"
 
-# 7) Managed block list/remove behavior
+# 7) Claude resume detection with Claude Code project path encoding
+CLAUDE_TMP="$(/usr/bin/mktemp -d)"
+trap 'rm -rf "$TMP_WORK" "$NODE_TMP" "$DECODE_TMP" "$CLAUDE_TMP"' EXIT
+CLAUDE_WORK="$CLAUDE_TMP/Mobile Documents/iCloud~com~omz-software~Pythonista3/Documents"
+mkdir -p "$CLAUDE_WORK" "$CLAUDE_TMP/home" "$CLAUDE_TMP/bin"
+printf 'claude\n' > "$CLAUDE_WORK/.loglm_agent"
+claude_project_path="$(cd "$CLAUDE_WORK" && pwd -P)"
+claude_project_key="$(printf '%s' "$claude_project_path" | LC_ALL=C sed -E 's#[^A-Za-z0-9._-]#-#g')"
+mkdir -p "$CLAUDE_TMP/home/.claude/projects/$claude_project_key"
+printf '{}\n' > "$CLAUDE_TMP/home/.claude/projects/$claude_project_key/session.jsonl"
+
+cat > "$CLAUDE_TMP/bin/claude" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+chmod +x "$CLAUDE_TMP/bin/claude"
+
+cat > "$CLAUDE_TMP/bin/script" <<'EOF'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "-h" ]]; then
+  printf 'usage: script [-q] [-a] [-F] -c command file\n'
+  exit 0
+fi
+printf '%s\n' "$*" > "$LOGLM_TEST_SCRIPT_ARGS"
+exit 0
+EOF
+chmod +x "$CLAUDE_TMP/bin/script"
+
+(
+  cd "$CLAUDE_WORK"
+  HOME="$CLAUDE_TMP/home" \
+    PATH="$CLAUDE_TMP/bin:$PATH" \
+    LOGLM_LANG=en \
+    LOGLM_TEST_SCRIPT_ARGS="$CLAUDE_TMP/script-args.out" \
+    "$ROOT_DIR/loglm" >/tmp/loglm-test-claude-resume.out 2>/tmp/loglm-test-claude-resume.err
+)
+rg -q 'claude --continue' "$CLAUDE_TMP/script-args.out" || fail "claude should resume when Claude Code history exists for encoded project path"
+pass "claude resume detection handles spaces and tildes in project path"
+
+# 8) Managed block list/remove behavior
 TMP_WORK="$(/usr/bin/mktemp -d)"
-trap 'rm -rf "$TMP_WORK" "$NODE_TMP" "$DECODE_TMP"' EXIT
+trap 'rm -rf "$TMP_WORK" "$NODE_TMP" "$DECODE_TMP" "$CLAUDE_TMP"' EXIT
 cd "$TMP_WORK"
 
 cat > AGENTS.md <<'EOF'
@@ -500,7 +540,7 @@ pass "agent update --all on empty set"
 if [[ "$RUN_E2E" -eq 1 ]]; then
   # 10) Network E2E: install/list/update/remove cycle against real GitHub repo
   E2E_DIR="$(/usr/bin/mktemp -d)"
-  trap 'rm -rf "$TMP_WORK" "$NODE_TMP" "$DECODE_TMP" "$E2E_DIR"' EXIT
+  trap 'rm -rf "$TMP_WORK" "$NODE_TMP" "$DECODE_TMP" "$CLAUDE_TMP" "$E2E_DIR"' EXIT
   cd "$E2E_DIR"
 
   run_cmd env LOGLM_AGENT_INSTALL_NO_LAUNCH=1 LOGLM_CODING_AGENT=codex "$ROOT_DIR/loglm" agent install "$E2E_REPO" --agent "$E2E_AGENT"

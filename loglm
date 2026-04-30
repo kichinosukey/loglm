@@ -82,7 +82,8 @@ ensure_agent_installed() {
 }
 
 claude_has_history() {
-  local encoded="${WORK_DIR//\//-}"
+  local encoded
+  encoded="$(printf '%s' "$WORK_DIR" | LC_ALL=C sed -E 's#[^A-Za-z0-9._-]#-#g')"
   compgen -G "$HOME/.claude/projects/$encoded/*.jsonl" > /dev/null 2>&1
 }
 
