@@ -81,6 +81,16 @@ ensure_agent_installed() {
   "$SETUP_DIR/ensure-agent.sh" "$agent"
 }
 
+ensure_runtime_notes() {
+  local agent="$1"
+
+  if ! resolve_setup_dir; then
+    return 0
+  fi
+
+  "$SETUP_DIR/agent-install.sh" runtime-notes --agent "$agent" --force --quiet || true
+}
+
 claude_has_history() {
   local encoded
   encoded="$(printf '%s' "$WORK_DIR" | LC_ALL=C sed -E 's#[^A-Za-z0-9._-]#-#g')"
@@ -295,6 +305,7 @@ else
 fi
 
 ensure_agent_installed "$AGENT"
+ensure_runtime_notes "$AGENT"
 
 if [[ "$DAILY_LOG" -eq 1 ]]; then
   LOG_FILE="$LOG_DIR/loglm-${AGENT}-log-${TODAY_LOCAL}.txt"

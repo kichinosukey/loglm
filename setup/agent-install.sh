@@ -203,6 +203,8 @@ platform_block_content() {
     macos)
       cat <<'EOF'
 # loglm Platform Notes (managed)
+- `loglm` is a wrapper command that launches coding agents and records terminal logs for later review.
+- This session may be running through `loglm`; if so, raw logs are being recorded under `./logs/`.
 - Runtime: native macOS.
 - Prefer macOS-native commands and paths.
 - For preview/open, use `open` (example: `open -a Skim paper.pdf`).
@@ -210,12 +212,16 @@ platform_block_content() {
 - Raw logs are stored under `./logs/` (from launch directory).
 - Raw log filename pattern: `logs/loglm-<agent>-log-YYYYMMDD-HHMMSS-pid<PID>.txt`
 - If `--daily-log` is used: `logs/loglm-<agent>-log-YYYYMMDD.txt`
-- Decode logs with: `loglm-decode <raw-log-file>`
+- Decode raw logs with: `loglm-decode logs/*`
+- Build a chronological overview with: `loglm-timeline logs/*.decoded.txt`
+- Prefer `*.decoded.txt` or `*.redacted.txt` over raw logs when asked to inspect past work.
 EOF
       ;;
     wsl2)
       cat <<'EOF'
 # loglm Platform Notes (managed)
+- `loglm` is a wrapper command that launches coding agents and records terminal logs for later review.
+- This session may be running through `loglm`; if so, raw logs are being recorded under `./logs/`.
 - Runtime: Ubuntu on WSL2.
 - Linux commands run inside WSL; Windows apps are outside.
 - For opening files on Windows side, prefer `wslview` or `cmd.exe /c start`.
@@ -224,12 +230,16 @@ EOF
 - Raw logs are stored under `./logs/` (from launch directory).
 - Raw log filename pattern: `logs/loglm-<agent>-log-YYYYMMDD-HHMMSS-pid<PID>.txt`
 - If `--daily-log` is used: `logs/loglm-<agent>-log-YYYYMMDD.txt`
-- Decode logs with: `loglm-decode <raw-log-file>`
+- Decode raw logs with: `loglm-decode logs/*`
+- Build a chronological overview with: `loglm-timeline logs/*.decoded.txt`
+- Prefer `*.decoded.txt` or `*.redacted.txt` over raw logs when asked to inspect past work.
 EOF
       ;;
     ubuntu-lima)
       cat <<'EOF'
 # loglm Platform Notes (managed)
+- `loglm` is a wrapper command that launches coding agents and records terminal logs for later review.
+- This session may be running through `loglm`; if so, raw logs are being recorded under `./logs/`.
 - Runtime: Ubuntu on Lima (macOS host).
 - Work inside shared directories when host-side preview is needed.
 - Do not assume guest can directly control host GUI apps.
@@ -238,12 +248,16 @@ EOF
 - Raw logs are stored under `./logs/` (from launch directory).
 - Raw log filename pattern: `logs/loglm-<agent>-log-YYYYMMDD-HHMMSS-pid<PID>.txt`
 - If `--daily-log` is used: `logs/loglm-<agent>-log-YYYYMMDD.txt`
-- Decode logs with: `loglm-decode <raw-log-file>`
+- Decode raw logs with: `loglm-decode logs/*`
+- Build a chronological overview with: `loglm-timeline logs/*.decoded.txt`
+- Prefer `*.decoded.txt` or `*.redacted.txt` over raw logs when asked to inspect past work.
 EOF
       ;;
     ubuntu)
       cat <<'EOF'
 # loglm Platform Notes (managed)
+- `loglm` is a wrapper command that launches coding agents and records terminal logs for later review.
+- This session may be running through `loglm`; if so, raw logs are being recorded under `./logs/`.
 - Runtime: native Ubuntu.
 - Prefer standard Linux CLI workflow and package management.
 - For GUI actions, use Linux-native tools available in the environment.
@@ -251,12 +265,16 @@ EOF
 - Raw logs are stored under `./logs/` (from launch directory).
 - Raw log filename pattern: `logs/loglm-<agent>-log-YYYYMMDD-HHMMSS-pid<PID>.txt`
 - If `--daily-log` is used: `logs/loglm-<agent>-log-YYYYMMDD.txt`
-- Decode logs with: `loglm-decode <raw-log-file>`
+- Decode raw logs with: `loglm-decode logs/*`
+- Build a chronological overview with: `loglm-timeline logs/*.decoded.txt`
+- Prefer `*.decoded.txt` or `*.redacted.txt` over raw logs when asked to inspect past work.
 EOF
       ;;
     raspberrypi)
       cat <<'EOF'
 # loglm Platform Notes (managed)
+- `loglm` is a wrapper command that launches coding agents and records terminal logs for later review.
+- This session may be running through `loglm`; if so, raw logs are being recorded under `./logs/`.
 - Runtime: Raspberry Pi OS.
 - Keep commands lightweight and avoid heavy defaults.
 - Prefer architecture-compatible binaries and packages.
@@ -264,12 +282,16 @@ EOF
 - Raw logs are stored under `./logs/` (from launch directory).
 - Raw log filename pattern: `logs/loglm-<agent>-log-YYYYMMDD-HHMMSS-pid<PID>.txt`
 - If `--daily-log` is used: `logs/loglm-<agent>-log-YYYYMMDD.txt`
-- Decode logs with: `loglm-decode <raw-log-file>`
+- Decode raw logs with: `loglm-decode logs/*`
+- Build a chronological overview with: `loglm-timeline logs/*.decoded.txt`
+- Prefer `*.decoded.txt` or `*.redacted.txt` over raw logs when asked to inspect past work.
 EOF
       ;;
     chromeos)
       cat <<'EOF'
 # loglm Platform Notes (managed)
+- `loglm` is a wrapper command that launches coding agents and records terminal logs for later review.
+- This session may be running through `loglm`; if so, raw logs are being recorded under `./logs/`.
 - Runtime: Chrome OS Linux container (Crostini).
 - Linux CLI runs in container; host integration can be limited.
 - Prefer container-local workflows and explicit file export paths.
@@ -277,19 +299,25 @@ EOF
 - Raw logs are stored under `./logs/` (from launch directory).
 - Raw log filename pattern: `logs/loglm-<agent>-log-YYYYMMDD-HHMMSS-pid<PID>.txt`
 - If `--daily-log` is used: `logs/loglm-<agent>-log-YYYYMMDD.txt`
-- Decode logs with: `loglm-decode <raw-log-file>`
+- Decode raw logs with: `loglm-decode logs/*`
+- Build a chronological overview with: `loglm-timeline logs/*.decoded.txt`
+- Prefer `*.decoded.txt` or `*.redacted.txt` over raw logs when asked to inspect past work.
 EOF
       ;;
     *)
       cat <<'EOF'
 # loglm Platform Notes (managed)
+- `loglm` is a wrapper command that launches coding agents and records terminal logs for later review.
+- This session may be running through `loglm`; if so, raw logs are being recorded under `./logs/`.
 - Runtime: generic Linux/unknown.
 - Prefer conservative, portable shell commands.
 - loglm repository: `https://github.com/ks91/loglm`
 - Raw logs are stored under `./logs/` (from launch directory).
 - Raw log filename pattern: `logs/loglm-<agent>-log-YYYYMMDD-HHMMSS-pid<PID>.txt`
 - If `--daily-log` is used: `logs/loglm-<agent>-log-YYYYMMDD.txt`
-- Decode logs with: `loglm-decode <raw-log-file>`
+- Decode raw logs with: `loglm-decode logs/*`
+- Build a chronological overview with: `loglm-timeline logs/*.decoded.txt`
+- Prefer `*.decoded.txt` or `*.redacted.txt` over raw logs when asked to inspect past work.
 EOF
       ;;
   esac
@@ -686,6 +714,61 @@ run_install() {
       "Install completed (installed=${installed:-0})."
 }
 
+ensure_runtime_notes_for_agent() {
+  local agent="$1"
+  local force="$2"
+  local quiet="$3"
+  local target pctx pbody polbody
+  local ptmp poltmp b0 e0 b1 e1
+
+  target="$(target_file_for_agent "$agent")"
+  if ! ensure_user_consents_to_modify "$target" "$force"; then
+    if [[ "$quiet" -eq 0 ]]; then
+      say "[$agent] スキップしました: $target" \
+          "[$agent] Skipped: $target"
+    fi
+    return 0
+  fi
+
+  pctx="$(runtime_context)"
+  pbody="$(platform_block_content "$pctx")"
+  ptmp="$(new_tmp_file)"
+  printf '%s\n' "$pbody" > "$ptmp"
+
+  polbody="$(policy_block_content)"
+  poltmp="$(new_tmp_file)"
+  printf '%s\n' "$polbody" > "$poltmp"
+
+  b0="$(block_begin_policy)"
+  e0="$(block_end_policy)"
+  upsert_block "$target" "$b0" "$e0" "$poltmp"
+
+  b1="$(block_begin_platform)"
+  e1="$(block_end_platform)"
+  upsert_block "$target" "$b1" "$e1" "$ptmp"
+
+  rm -f "$ptmp" "$poltmp"
+
+  if [[ "$quiet" -eq 0 ]]; then
+    say "[$agent] loglm 実行時ノートを更新しました: $target" \
+        "[$agent] Updated loglm runtime notes: $target"
+  fi
+}
+
+run_runtime_notes() {
+  local scope="$1"
+  local force="$2"
+  local quiet="$3"
+  local agent
+
+  for agent in codex claude gemini; do
+    if [[ "$scope" != "all" && "$scope" != "$agent" ]]; then
+      continue
+    fi
+    ensure_runtime_notes_for_agent "$agent" "$force" "$quiet"
+  done
+}
+
 if [[ $# -lt 1 ]]; then
   usage
   exit 2
@@ -699,6 +782,7 @@ FORCE=0
 TARGET_SPEC=""
 UPDATE_ALL=0
 VERBOSE=0
+QUIET=0
 
 while (($# > 0)); do
   case "$1" in
@@ -721,6 +805,10 @@ while (($# > 0)); do
       ;;
     --verbose|-v)
       VERBOSE=1
+      shift
+      ;;
+    --quiet)
+      QUIET=1
       shift
       ;;
     -h|--help)
@@ -823,6 +911,14 @@ case "$SUBCMD" in
       exit 2
     fi
     run_install "$TARGET_SPEC" "$SCOPE" 1
+    ;;
+
+  runtime-notes)
+    if [[ -n "$TARGET_SPEC" || "$UPDATE_ALL" -eq 1 || "$VERBOSE" -eq 1 ]]; then
+      usage >&2
+      exit 2
+    fi
+    run_runtime_notes "$SCOPE" "$FORCE" "$QUIET"
     ;;
 
   *)

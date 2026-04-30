@@ -469,6 +469,11 @@ chmod +x "$CLAUDE_TMP/bin/script"
     "$ROOT_DIR/loglm" >/tmp/loglm-test-claude-resume.out 2>/tmp/loglm-test-claude-resume.err
 )
 rg -q 'claude --continue' "$CLAUDE_TMP/script-args.out" || fail "claude should resume when Claude Code history exists for encoded project path"
+[[ -f "$CLAUDE_WORK/CLAUDE.md" ]] || fail "loglm should create CLAUDE.md runtime notes on Claude launch"
+rg -q 'loglm Platform Notes' "$CLAUDE_WORK/CLAUDE.md" || fail "CLAUDE.md should include loglm platform notes"
+rg -q '`loglm` is a wrapper command that launches coding agents' "$CLAUDE_WORK/CLAUDE.md" || fail "CLAUDE.md should explain what loglm is"
+rg -q 'Decode raw logs with: `loglm-decode logs/\*`' "$CLAUDE_WORK/CLAUDE.md" || fail "CLAUDE.md should tell Claude how to decode loglm logs"
+rg -q 'Build a chronological overview with: `loglm-timeline logs/\*\.decoded\.txt`' "$CLAUDE_WORK/CLAUDE.md" || fail "CLAUDE.md should mention loglm-timeline"
 pass "claude resume detection handles spaces and tildes in project path"
 
 # 8) Managed block list/remove behavior
