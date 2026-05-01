@@ -223,6 +223,18 @@ rg -q '^❯ new prompt$' "$DECODE_TMP/loglm-claude-log-20260403-040000-pid4.deco
 ! rg -q '^❯ old prompt$' "$DECODE_TMP/loglm-claude-log-20260403-040000-pid4.decoded.txt" || fail "decode overlap trimming should drop repeated Claude-style leading context"
 pass "decode overlap trimming for Claude-style prompts"
 
+{
+  printf '===== loglm start [claude]: 2026-05-01 14:30:19 +0900 =====\n\n'
+  printf 'oglmって知ってる？\n'
+  printf '\033[48;2;240;240;240m\033[38;2;175;175;175m❯ \033[38;2;0;0;0mloglm って知ってる？\033[39m\r\033[1B\n'
+  printf '⏺ はい。\n'
+} > "$DECODE_TMP/loglm-claude-log-20260501-143017-pid29336.txt"
+
+run_cmd "$ROOT_DIR/loglm-decode" "$DECODE_TMP/loglm-claude-log-20260501-143017-pid29336.txt"
+rg -q '^❯ loglm って知ってる？$' "$DECODE_TMP/loglm-claude-log-20260501-143017-pid29336.decoded.txt" || fail "decode should keep complete Claude prompt redraw after CR cursor movement"
+! rg -q '^oglmって知ってる？$' "$DECODE_TMP/loglm-claude-log-20260501-143017-pid29336.decoded.txt" || fail "decode should drop partial Claude prompt echo when complete redraw exists"
+pass "decode Claude prompt redraw after CR cursor movement"
+
 cat > "$DECODE_TMP/loglm-gemini-log-20260403-223849-pid84024.txt" <<'EOF'
 ===== loglm start [gemini]: 2026-04-03 22:38:49 +0900 =====
  ▝▜▄    Gemini CLI v0.36.0

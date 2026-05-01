@@ -99,6 +99,7 @@ decode_raw_to_file() {
   LOGLM_DECODE_PROFILE="$profile" perl -e '
 use strict;
 use warnings;
+use utf8;
 use Encode qw(decode encode FB_DEFAULT);
 
 binmode(STDIN);
@@ -116,7 +117,9 @@ my $state = $NORMAL;
 my $out = q{};
 my $c;
 my $pending_cr = 0;
+my $cr_before_esc = 0;
 my $csi_param = q{};
+my $last_csi_param = q{};
 my $profile = $ENV{LOGLM_DECODE_PROFILE} // q{};
 my $is_claude = ($profile eq "claude") ? 1 : 0;
 my $is_gemini = ($profile eq "gemini") ? 1 : 0;
@@ -133,6 +136,14 @@ while (read(STDIN, $c, 1)) {
         next;
       } elsif ($b == 0x0D) {
         # Consecutive CRs (e.g. Claude Code uses \r\r\n): ignore extra CR.
+        next;
+      } elsif ($b == 0x1B && $is_claude) {
+        # Claude/Ink often renders a full line, then uses CR + CSI cursor
+        # movement to continue drawing nearby rows. Do not erase the line
+        # until we know the escape is not a vertical cursor move.
+        $pending_cr = 0;
+        $cr_before_esc = 1;
+        $state = $ESC;
         next;
       } else {
         # Lone CR: move to start of current line (overwrite semantics).
@@ -182,6 +193,20 @@ while (read(STDIN, $c, 1)) {
   if ($state == $CSI) {
     if ($b >= 0x40 && $b <= 0x7E) {
       # CSI final byte.
+      $last_csi_param = $csi_param;
+      if ($cr_before_esc && ($b == ord("A") || $b == ord("B"))) {
+        my $n = ($csi_param =~ /^(\d+)$/) ? int($csi_param) : 1;
+        $out .= "\n" x $n if $n > 0;
+        $cr_before_esc = 0;
+      } elsif ($cr_before_esc) {
+        my $last_nl = rindex($out, "\n");
+        if ($last_nl >= 0) {
+          substr($out, $last_nl + 1) = q{};
+        } else {
+          $out = q{};
+        }
+        $cr_before_esc = 0;
+      }
       if ($b == ord("C")) {
         # Cursor Forward: many TUIs (e.g. Claude Code/Ink) use ESC[nC
         # instead of literal spaces for inter-word/column spacing.
@@ -442,6 +467,41 @@ if ($is_claude) {
   @merged = @normalized;
 } else {
   @merged = @lines;
+}
+
+if ($is_claude) {
+  # If a later complete prompt redraw exists, drop the partial staircase echo
+  # that is a suffix of it (e.g. "oglm..." before "❯ loglm ...").
+  my @filtered = ();
+  for (my $i = 0; $i < @merged; $i++) {
+    my $curr = $merged[$i];
+    my $curr_cmp = $curr;
+    $curr_cmp =~ s/^\s+//;
+    $curr_cmp =~ s/\s+$//;
+    $curr_cmp =~ s/^[❯>›]\s*//;
+    $curr_cmp =~ s/\s+//g;
+
+    my $drop = 0;
+    if (length($curr_cmp) >= 4) {
+      my $limit = $i + 80;
+      $limit = $#merged if $limit > $#merged;
+      for my $j ($i + 1 .. $limit) {
+        my $next = $merged[$j];
+        next unless $next =~ /^\s*[❯>›]\s*\S/;
+        my $next_cmp = $next;
+        $next_cmp =~ s/^\s+//;
+        $next_cmp =~ s/\s+$//;
+        $next_cmp =~ s/^[❯>›]\s*//;
+        $next_cmp =~ s/\s+//g;
+        if (length($next_cmp) > length($curr_cmp) && substr($next_cmp, -length($curr_cmp)) eq $curr_cmp) {
+          $drop = 1;
+          last;
+        }
+      }
+    }
+    push @filtered, $curr unless $drop;
+  }
+  @merged = @filtered;
 }
 
 # Collapse noisy consecutive duplicates and repeated blank lines.
