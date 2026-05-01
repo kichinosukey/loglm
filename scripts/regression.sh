@@ -235,6 +235,46 @@ rg -q '^❯ loglm って知ってる？$' "$DECODE_TMP/loglm-claude-log-20260501
 ! rg -q '^oglmって知ってる？$' "$DECODE_TMP/loglm-claude-log-20260501-143017-pid29336.decoded.txt" || fail "decode should drop partial Claude prompt echo when complete redraw exists"
 pass "decode Claude prompt redraw after CR cursor movement"
 
+cat > "$DECODE_TMP/loglm-claude-log-20260501-050000-pid5.txt" <<'EOF'
+===== loglm start [claude]: 2026-05-01 05:00:00 +0900 =====
+
+❯ previous prompt
+⏺ previous answer
+tail 01
+tail 02
+tail 03
+tail 04
+tail 05
+tail 06
+tail 07
+tail 08
+tail 09
+tail 10
+EOF
+cat > "$DECODE_TMP/loglm-claude-log-20260501-051000-pid6.txt" <<'EOF'
+===== loglm start [claude]: 2026-05-01 05:10:00 +0900 =====
+
+❯ new prompt
+new answer body that should remain after tail overlap
+tail 01
+tail 02
+tail 03
+tail 04
+tail 05
+tail 06
+tail 07
+tail 08
+tail 09
+tail 10
+EOF
+
+run_cmd "$ROOT_DIR/loglm-decode" "$DECODE_TMP/loglm-claude-log-20260501-050000-pid5.txt"
+run_cmd env LOGLM_DECODE_MIN_OVERLAP_LINES=4 LOGLM_DECODE_MIN_OVERLAP_CHARS=20 \
+  "$ROOT_DIR/loglm-decode" "$DECODE_TMP/loglm-claude-log-20260501-051000-pid6.txt"
+rg -q '^❯ new prompt$' "$DECODE_TMP/loglm-claude-log-20260501-051000-pid6.decoded.txt" || fail "decode should not discard Claude session content for tail-only overlap"
+rg -q '^new answer body that should remain after tail overlap$' "$DECODE_TMP/loglm-claude-log-20260501-051000-pid6.decoded.txt" || fail "decode should keep Claude session body for tail-only overlap"
+pass "decode ignores Claude tail-only overlap"
+
 cat > "$DECODE_TMP/loglm-gemini-log-20260403-223849-pid84024.txt" <<'EOF'
 ===== loglm start [gemini]: 2026-04-03 22:38:49 +0900 =====
  ▝▜▄    Gemini CLI v0.36.0

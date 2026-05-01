@@ -899,6 +899,15 @@ if ($profile eq "codex") {
   }
 }
 
+if ($profile ne "codex" && $best_offset > $body_start + 80) {
+  # Overlap trimming is intended for leading context replay after resume.
+  # Tail matches (for example "Resume this session with: ...") must not cause
+  # the whole current session to be discarded.
+  $best = 0;
+  $best_chars = 0;
+  $best_offset = -1;
+}
+
 if ($best >= $min_lines && $best_chars >= $min_chars) {
   if ($profile eq "codex" && $best_offset == $body_start) {
     my $scan_limit = $body_start + 220;
