@@ -64,11 +64,19 @@ loglm
 
 - `./logs/` for session logs
 - `./.loglm_agent` for the selected agent
+- agent-specific instruction notes for the selected coding agent:
+  - `AGENTS.md` for Codex
+  - `CLAUDE.md` for Claude Code
+  - `GEMINI.md` for Gemini
 
 Both are scoped to the directory where you run `loglm`.
 By default, each launch writes to a unique log file:
 
 - `logs/loglm-<agent>-log-YYYYMMDD-HHMMSS-pid<PID>.txt`
+
+The managed instruction notes tell the coding agent that it may be running through `loglm`,
+where logs are stored, and how to use `loglm-decode` and `loglm-timeline` when asked to
+inspect previous work.
 
 If the selected agent command is missing (`codex`, `claude`, or `gemini`),
 `loglm` prompts and runs an installer from `~/.local/share/loglm/setup`.
