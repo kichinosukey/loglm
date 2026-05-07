@@ -275,6 +275,54 @@ rg -q '^❯ new prompt$' "$DECODE_TMP/loglm-claude-log-20260501-051000-pid6.deco
 rg -q '^new answer body that should remain after tail overlap$' "$DECODE_TMP/loglm-claude-log-20260501-051000-pid6.decoded.txt" || fail "decode should keep Claude session body for tail-only overlap"
 pass "decode ignores Claude tail-only overlap"
 
+cat > "$DECODE_TMP/loglm-claude-log-20260501-052000-pid7.txt" <<'EOF'
+===== loglm start [claude]: 2026-05-01 05:20:00 +0900 =====
+
+❯ しりとりしよう
+⏺ いいよ！じゃあ始めよう。
+しりとり
+「り」からどうぞ！
+❯ 倫理
+⏺ 倫理（りんり）
+「り」から！
+❯ ごま
+⏺ ごま（胡麻）
+「ま」から！
+❯ はじめよう
+⏺ 環境チェック完了！
+今回書く論文は何のためのもの？
+EOF
+cat > "$DECODE_TMP/loglm-claude-log-20260501-053000-pid8.txt" <<'EOF'
+===== loglm start [claude]: 2026-05-01 05:30:00 +0900 =====
+
+Claude Code v2.1.126
+❯ しりとりしよう
+⏺ いいよ！じゃあ始めよう。
+しりとり
+「り」からどうぞ！
+❯ 倫理
+⏺ 倫理（りんり）
+「り」から！
+❯ ごま
+⏺ ごま（胡麻）
+「ま」から！
+Read 1 file (ctrl+o to expand)
+❯ はじめよう
+extra redraw line not present in previous log
+⏺ 環境チェック完了！
+今回書く論文は何のためのもの？
+❯ /exit
+❯ Plonky
+EOF
+
+run_cmd "$ROOT_DIR/loglm-decode" "$DECODE_TMP/loglm-claude-log-20260501-052000-pid7.txt"
+run_cmd env LOGLM_DECODE_MIN_OVERLAP_LINES=4 LOGLM_DECODE_MIN_OVERLAP_CHARS=60 \
+  "$ROOT_DIR/loglm-decode" "$DECODE_TMP/loglm-claude-log-20260501-053000-pid8.txt"
+! rg -q '^❯ しりとりしよう$' "$DECODE_TMP/loglm-claude-log-20260501-053000-pid8.decoded.txt" || fail "decode should trim Claude leading replay with redraw variations"
+rg -q '^❯ /exit$' "$DECODE_TMP/loglm-claude-log-20260501-053000-pid8.decoded.txt" || fail "decode should keep first new Claude prompt after replay"
+rg -q '^❯ Plonky$' "$DECODE_TMP/loglm-claude-log-20260501-053000-pid8.decoded.txt" || fail "decode should keep later new Claude prompts after replay"
+pass "decode trims Claude leading replay with redraw variations"
+
 cat > "$DECODE_TMP/loglm-gemini-log-20260403-223849-pid84024.txt" <<'EOF'
 ===== loglm start [gemini]: 2026-04-03 22:38:49 +0900 =====
  ▝▜▄    Gemini CLI v0.36.0

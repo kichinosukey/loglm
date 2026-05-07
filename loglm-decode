@@ -661,6 +661,9 @@ trim_overlap_with_previous() {
   perl -0pi -e '
 use strict;
 use warnings;
+use utf8;
+use open qw(:std :encoding(UTF-8));
+use Encode ();
 
 my $prev_path = $ENV{LOGLM_DECODE_PREV_PATH} // q{};
 my $profile = $ENV{LOGLM_DECODE_OVERLAP_PROFILE} // q{};
@@ -671,7 +674,9 @@ open my $pfh, "<:raw", $prev_path or die "open prev: $!";
 local $/;
 my $prev = <$pfh>;
 close $pfh;
+$prev = Encode::decode("UTF-8", $prev, 0);
 my $curr = $_;
+$curr = Encode::decode("UTF-8", $curr, 0) unless utf8::is_utf8($curr);
 
 my @prev = split /\n/, $prev, -1;
 my @curr = split /\n/, $curr, -1;
@@ -899,6 +904,106 @@ if ($profile eq "codex") {
   }
 }
 
+if ($profile eq "claude") {
+  sub claude_significant_lines {
+    my ($lines_ref, $start_idx) = @_;
+    my @items = ();
+    for my $i ($start_idx .. $#{$lines_ref}) {
+      my $line = $lines_ref->[$i] // q{};
+      my $s = normalize_overlap_line($line);
+      next if $s eq q{};
+      next if $s =~ /^===== loglm start /;
+      next if $s =~ /^[─-]{10,}$/;
+      next if $s =~ /^\(?status\)?$/i;
+      next if $s =~ /^\? for shortcuts/;
+      next if $s =~ /^esc to interrupt/i;
+      next if $s =~ /^Claude Code v[0-9.]+/;
+      next if $s =~ /Claude Code v[0-9.]+/;
+      next if $s =~ /^(?:Sonnet|Opus|Haiku) /;
+      next if $s =~ m{^~/};
+      next if $s =~ /^[▗▘▝▖\s]+$/;
+      next if length($s) < 2;
+
+      my $is_prompt = ($s =~ /^[❯>›]\s*\S/) ? 1 : 0;
+      $s =~ s/^[❯>›]\s*/❯ /;
+      $s =~ s/^\s*⏺\s*/⏺ /;
+      push @items, [$i, $s, $is_prompt];
+    }
+    return @items;
+  }
+
+  my @prev_sig = claude_significant_lines(\@prev, 0);
+  my @curr_sig = claude_significant_lines(\@curr, $body_start);
+  shift @curr_sig while @curr_sig && !$curr_sig[0]->[2] && $curr_sig[0]->[1] !~ /^⏺ /;
+
+  if (@prev_sig && @curr_sig) {
+    my $sig_best_matched = 0;
+    my $sig_best_chars = 0;
+    my $sig_best_end_line = -1;
+    my $sig_min_chars = int($min_chars / 3);
+    $sig_min_chars = 120 if $sig_min_chars < 120;
+
+    for my $start_prev (0 .. $#prev_sig) {
+      next unless $prev_sig[$start_prev]->[1] eq $curr_sig[0]->[1];
+
+      my $pi = $start_prev;
+      my $matched = 0;
+      my $chars = 0;
+      my $last_ci = -1;
+      my $miss_streak = 0;
+
+      for my $ci (0 .. $#curr_sig) {
+        my $needle = $curr_sig[$ci]->[1];
+        my $found = -1;
+        my $probe_limit = $pi + 12;
+        $probe_limit = $#prev_sig if $probe_limit > $#prev_sig;
+
+        for my $probe ($pi .. $probe_limit) {
+          if ($prev_sig[$probe]->[1] eq $needle) {
+            $found = $probe;
+            last;
+          }
+        }
+
+        if ($found >= 0) {
+          $matched++;
+          $chars += length($needle) + 1;
+          $last_ci = $ci;
+          $pi = $found + 1;
+          $miss_streak = 0;
+          next;
+        }
+
+        last if $curr_sig[$ci]->[2] && $matched >= 8;
+        $miss_streak++;
+        last if $miss_streak >= 24;
+      }
+
+      next if $matched < 8;
+      next if $chars < $sig_min_chars;
+      if ($matched > $sig_best_matched || ($matched == $sig_best_matched && $chars > $sig_best_chars)) {
+        $sig_best_matched = $matched;
+        $sig_best_chars = $chars;
+        $sig_best_end_line = $curr_sig[$last_ci]->[0] if $last_ci >= 0;
+      }
+    }
+
+    if ($sig_best_end_line >= 0) {
+      my $sig_best_lines = $sig_best_end_line - $body_start + 1;
+      if (
+        $best_offset < 0 ||
+        $best_offset > $body_start + 80 ||
+        $sig_best_lines > $best ||
+        $sig_best_chars > $best_chars
+      ) {
+        $best_offset = $body_start;
+        $best = $sig_best_lines;
+        $best_chars = $sig_best_chars;
+      }
+    }
+  }
+}
+
 if ($profile ne "codex" && $best_offset > $body_start + 80) {
   # Overlap trimming is intended for leading context replay after resume.
   # Tail matches (for example "Resume this session with: ...") must not cause
@@ -992,6 +1097,8 @@ if ($profile eq "codex") {
     $_ .= "\n" if length($_);
   }
 }
+
+$_ = Encode::encode("UTF-8", $_) if utf8::is_utf8($_);
 ' "$out_file"
 
   rm -f "$prev_tmp"
