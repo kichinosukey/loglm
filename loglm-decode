@@ -1531,6 +1531,56 @@ if [[ "$REVIEW_PII" -eq 1 ]]; then
   inputs=("${inputs[@]:1}")
 fi
 
+if [[ "$REVIEW_PII" -eq 1 && -z "$output_path" ]]; then
+  output_keys=()
+  best_inputs=()
+  best_priorities=()
+  first_indexes=()
+  deduped_inputs=()
+
+  for idx in "${!inputs[@]}"; do
+    in_file="${inputs[$idx]}"
+    out_file="$(derive_redacted_output_path "$in_file")"
+    priority=2
+    if is_decoded_input "$in_file"; then
+      priority=3
+    elif is_redacted_input "$in_file"; then
+      priority=1
+    fi
+
+    found_index=-1
+    for key_idx in "${!output_keys[@]}"; do
+      if [[ "${output_keys[$key_idx]}" == "$out_file" ]]; then
+        found_index="$key_idx"
+        break
+      fi
+    done
+
+    if [[ "$found_index" -lt 0 ]]; then
+      output_keys+=("$out_file")
+      best_inputs+=("$in_file")
+      best_priorities+=("$priority")
+      first_indexes+=("$idx")
+      continue
+    fi
+
+    if (( priority > best_priorities[$found_index] )); then
+      best_inputs[$found_index]="$in_file"
+      best_priorities[$found_index]="$priority"
+    fi
+  done
+
+  while IFS= read -r key_idx; do
+    deduped_inputs+=("${best_inputs[$key_idx]}")
+  done < <(
+    for key_idx in "${!output_keys[@]}"; do
+      printf '%s\t%s\n' "${first_indexes[$key_idx]}" "$key_idx"
+    done | LC_ALL=C sort -n | cut -f2-
+  )
+
+  inputs=("${deduped_inputs[@]}")
+fi
+
 if [[ -n "$output_path" && ${#inputs[@]} -ne 1 ]]; then
   echo "error: --output can be used only with a single input file." >&2
   exit 2
@@ -1567,7 +1617,7 @@ for in_file in "${inputs[@]}"; do
   fi
   if [[ "$in_file" == "$out_file" ]]; then
     if [[ "$REVIEW_PII" -eq 1 ]] && is_redacted_input "$in_file"; then
-      review_pii_candidates "$out_file" "$DEFAULT_REPLACEMENT"
+      review_pii_candidates "$out_file" "$PII_LIST_INPUT" "$REPLACE_ALL"
       continue
     fi
     echo "error: input and output must be different files: $in_file" >&2

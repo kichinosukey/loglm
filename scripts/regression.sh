@@ -529,6 +529,27 @@ rg -q 'Polite phrase: お願いします' "$DECODE_TMP/pii-exclude.redacted.txt"
 rg -Fq 'excludes: 願いし' /tmp/loglm-test-pii-exclude.out || fail "pii review should show group exclusions"
 pass "pii group exclusions"
 
+cat > "$DECODE_TMP/loglm-claude-log-20260501-060000-pid12.decoded.txt" <<'EOF'
+===== loglm start [claude]: 2026-05-01 06:00:00 +0900 =====
+Name: Kenji Saito
+Content: this decoded source should win
+EOF
+cat > "$DECODE_TMP/loglm-claude-log-20260501-060000-pid12.redacted.txt" <<'EOF'
+stale redacted file
+EOF
+cat > "$DECODE_TMP/loglm-claude-log-20260501-060000-pid12.txt" <<'EOF'
+raw source should not overwrite decoded redaction
+EOF
+
+"$ROOT_DIR/loglm-decode" --review-pii --replace-all "$DECODE_TMP/pii-candidates.txt" \
+  "$DECODE_TMP/loglm-claude-log-20260501-060000-pid12.decoded.txt" \
+  "$DECODE_TMP/loglm-claude-log-20260501-060000-pid12.redacted.txt" \
+  "$DECODE_TMP/loglm-claude-log-20260501-060000-pid12.txt" > /tmp/loglm-test-pii-dedup.out 2> /tmp/loglm-test-pii-dedup.err
+rg -q 'Name: \*\*\*1\*' "$DECODE_TMP/loglm-claude-log-20260501-060000-pid12.redacted.txt" || fail "pii review should redact from decoded source when duplicate outputs are present"
+rg -q 'Content: this decoded source should win' "$DECODE_TMP/loglm-claude-log-20260501-060000-pid12.redacted.txt" || fail "pii review should not overwrite decoded redaction with raw input"
+! rg -q 'stale redacted file|raw source should not overwrite' "$DECODE_TMP/loglm-claude-log-20260501-060000-pid12.redacted.txt" || fail "pii review should skip duplicate redacted/raw inputs for the same output"
+pass "pii review deduplicates mixed input variants"
+
 # 4) install-node runtime behavior for missing NVM_DIR
 NODE_TMP="$(/usr/bin/mktemp -d)"
 trap 'rm -rf "$TMP_WORK" "$NODE_TMP" "$DECODE_TMP" "$CLAUDE_TMP"' EXIT
