@@ -65,6 +65,7 @@ zip redacted-logs.zip logs/*.redacted.txt
 - One literal string per line
 - Empty lines separate groups
 - Lines beginning with `#` are treated as comments
+- Lines beginning with `-` are exclusion strings for that group
 
 Example:
 
@@ -80,6 +81,15 @@ Natsume Soseki
 Natsume
 Soseki
 ```
+
+Exclusion example:
+
+```text
+いし
+-願いし
+```
+
+This redacts the nickname `いし` while preserving phrases such as `お願いします`.
 
 ## 日本語
 
@@ -141,6 +151,7 @@ zip redacted-logs.zip logs/*.redacted.txt
 - 1 行に 1 文字列
 - 空行はグループの区切り
 - `#` で始まる行はコメントとして扱われる
+- `-` で始まる行は、そのグループ内の除外文字列として扱われる
 
 例:
 
@@ -157,3 +168,12 @@ Natsume Soseki
 Natsume
 Soseki
 ```
+
+除外の例:
+
+```text
+いし
+-願いし
+```
+
+この場合、ニックネームとしての `いし` は置換されるが、`お願いします` の中の `いし` は置換されない。

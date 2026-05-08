@@ -247,7 +247,17 @@ Behavior:
 - if the input is already `*.redacted.txt`, it is reviewed in place
 - candidates show their first matching line number and line text for review
 - the candidate list is grouped by blank lines
+- within a group, lines beginning with `-` are exclusion strings
 - each group is replaced with a numbered token such as `***1*`, `***2*`
+
+Example exclusion:
+
+```text
+いし
+-願いし
+```
+
+This redacts the nickname `いし` while preserving phrases such as `お願いします`.
 
 For bulk redaction without interactive prompts:
 

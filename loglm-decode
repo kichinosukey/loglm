@@ -28,6 +28,8 @@ Behavior:
   - With --review-pii, the first positional argument is a grouped
     pii-candidates.txt file and the remaining positional arguments are logs.
   - Empty lines in pii-candidates.txt separate person/entity groups.
+  - In a group, lines beginning with "-" are exclusion strings for that group.
+    Example: "いし" with "-願いし" keeps "お願いします" unchanged.
   - Each group is replaced with a numbered token: ***1*, ***2*, ...
   - --replace-all applies the numbered replacement to every matched group
     without prompts.
@@ -1242,6 +1244,7 @@ close $fh;
 open my $pfh, "<:raw", $pii_list_file or die "open pii_list_file: $!";
 my @raw_groups;
 my @current;
+my @current_excludes;
 while (my $raw = <$pfh>) {
   my $line = decode("UTF-8", $raw, FB_DEFAULT);
   chomp $line;
@@ -1251,25 +1254,52 @@ while (my $raw = <$pfh>) {
   }
   if ($line =~ /^\s*$/) {
     if (@current) {
-      push @raw_groups, [@current];
+      push @raw_groups, { values => [@current], excludes => [@current_excludes] };
       @current = ();
+      @current_excludes = ();
     }
+    next;
+  }
+  if ($line =~ /^-\s*(.+)$/) {
+    push @current_excludes, $1;
     next;
   }
   push @current, $line;
 }
-push @raw_groups, [@current] if @current;
+push @raw_groups, { values => [@current], excludes => [@current_excludes] } if @current;
 close $pfh;
+
+sub excluded_at {
+  my ($line, $start, $length, $excludes_ref) = @_;
+  my $end = $start + $length;
+  for my $exclude (@{$excludes_ref}) {
+    next if !defined($exclude) || $exclude eq q{};
+    my $pos = -1;
+    while (1) {
+      $pos = index($line, $exclude, $pos + 1);
+      last if $pos < 0;
+      my $exclude_end = $pos + length($exclude);
+      return 1 if $pos <= $start && $end <= $exclude_end;
+    }
+  }
+  return 0;
+}
 
 my %seen_value;
 for my $gidx (0 .. $#raw_groups) {
-  my @unique = grep { !$seen_value{$_}++ } @{ $raw_groups[$gidx] };
+  my @unique = grep { !$seen_value{$_}++ } @{ $raw_groups[$gidx]->{values} };
   @unique = sort { length($b) <=> length($a) || $a cmp $b } @unique;
+  my @excludes = @{ $raw_groups[$gidx]->{excludes} };
+  @excludes = sort { length($b) <=> length($a) || $a cmp $b } @excludes;
   my $token = sprintf("***%d*", $gidx + 1);
   my ($first_line_no, $first_line_text, $hits) = (undef, undef, 0);
   for my $candidate (@unique) {
     for my $i (0 .. $#lines) {
-      if (index($lines[$i], $candidate) >= 0) {
+      my $pos = -1;
+      while (1) {
+        $pos = index($lines[$i], $candidate, $pos + 1);
+        last if $pos < 0;
+        next if excluded_at($lines[$i], $pos, length($candidate), \@excludes);
         $hits++;
         if (!defined $first_line_no) {
           $first_line_no = $i + 1;
@@ -1281,7 +1311,8 @@ for my $gidx (0 .. $#raw_groups) {
   }
   next if !$hits;
   my $joined = join("\x1f", @unique);
-  print join("\t", "pii_group", $hits, $token, ($first_line_no // q{}), ($first_line_text // q{}), $joined), "\n";
+  my $excluded = join("\x1f", @excludes);
+  print join("\t", "pii_group", $hits, $token, ($first_line_no // q{}), ($first_line_text // q{}), $joined, $excluded), "\n";
 }
 ' 
 }
@@ -1290,19 +1321,77 @@ replace_group_in_file() {
   local file="$1"
   local replacement="$2"
   shift 2
-  local values=("$@")
-  local value
-  for value in "${values[@]}"; do
-    replace_literal_in_file "$file" "$value" "$replacement"
-  done
+  local values_joined="$1"
+  local excludes_joined="$2"
+  VALUES_JOINED="$values_joined" EXCLUDES_JOINED="$excludes_joined" REPLACEMENT="$replacement" perl -0pi -e '
+use strict;
+use warnings;
+use utf8;
+use open qw(:std :encoding(UTF-8));
+use Encode ();
+
+my $replacement = $ENV{REPLACEMENT} // q{};
+my $values_joined = $ENV{VALUES_JOINED} // q{};
+my $excludes_joined = $ENV{EXCLUDES_JOINED} // q{};
+$values_joined = Encode::decode("UTF-8", $values_joined, 0) unless utf8::is_utf8($values_joined);
+$excludes_joined = Encode::decode("UTF-8", $excludes_joined, 0) unless utf8::is_utf8($excludes_joined);
+my @values = grep { $_ ne q{} } split(/\x1f/, $values_joined, -1);
+my @excludes = grep { $_ ne q{} } split(/\x1f/, $excludes_joined, -1);
+@values = sort { length($b) <=> length($a) || $a cmp $b } @values;
+@excludes = sort { length($b) <=> length($a) || $a cmp $b } @excludes;
+
+$_ = Encode::decode("UTF-8", $_, 0) unless utf8::is_utf8($_);
+
+sub excluded_at {
+  my ($line, $start, $length) = @_;
+  my $end = $start + $length;
+  for my $exclude (@excludes) {
+    my $pos = -1;
+    while (1) {
+      $pos = index($line, $exclude, $pos + 1);
+      last if $pos < 0;
+      my $exclude_end = $pos + length($exclude);
+      return 1 if $pos <= $start && $end <= $exclude_end;
+    }
+  }
+  return 0;
+}
+
+my @lines = split(/\n/, $_, -1);
+for my $li (0 .. $#lines) {
+  my $line = $lines[$li];
+  my $out = q{};
+  my $pos = 0;
+  while ($pos < length($line)) {
+    my $matched = q{};
+    for my $value (@values) {
+      next unless substr($line, $pos, length($value)) eq $value;
+      next if excluded_at($line, $pos, length($value));
+      $matched = $value;
+      last;
+    }
+    if ($matched ne q{}) {
+      $out .= $replacement;
+      $pos += length($matched);
+    } else {
+      $out .= substr($line, $pos, 1);
+      $pos++;
+    }
+  }
+  $lines[$li] = $out;
+}
+$_ = join("\n", @lines);
+$_ = Encode::encode("UTF-8", $_) if utf8::is_utf8($_);
+' "$file"
 }
 
 review_pii_candidates() {
   local out_file="$1"
   local pii_list_file="$2"
   local replace_all="${3:-0}"
-  local line reason count replacement line_no line_text group_values answer total index
+  local line reason count replacement line_no line_text group_values group_excludes answer total index
   local -a values
+  local -a excludes
   local -a candidates
 
   while IFS= read -r line; do
@@ -1320,8 +1409,9 @@ review_pii_candidates() {
   index=0
   for line in "${candidates[@]}"; do
     index=$((index + 1))
-    IFS=$'\t' read -r reason count replacement line_no line_text group_values <<< "$line"
+    IFS=$'\t' read -r reason count replacement line_no line_text group_values group_excludes <<< "$line"
     IFS=$'\x1f' read -r -a values <<< "$group_values"
+    IFS=$'\x1f' read -r -a excludes <<< "$group_excludes"
     printf '[%d/%d] %s (%s hit%s): %s\n' \
       "$index" "$total" "$reason" "$count" \
       "$([[ "$count" == "1" ]] && printf '' || printf 's')" \
@@ -1330,8 +1420,11 @@ review_pii_candidates() {
       printf '        line %s: %s\n' "$line_no" "$line_text"
     fi
     printf '        aliases: %s\n' "$(IFS=', '; printf '%s' "${values[*]}")"
+    if [[ -n "${group_excludes:-}" ]]; then
+      printf '        excludes: %s\n' "$(IFS=', '; printf '%s' "${excludes[*]}")"
+    fi
     if [[ "$replace_all" -eq 1 ]]; then
-      replace_group_in_file "$out_file" "$replacement" "${values[@]}"
+      replace_group_in_file "$out_file" "$replacement" "$group_values" "${group_excludes:-}"
       continue
     fi
     while true; do
@@ -1339,7 +1432,7 @@ review_pii_candidates() {
       IFS= read -r answer || answer="q"
       case "$answer" in
         y|Y|yes|YES)
-          replace_group_in_file "$out_file" "$replacement" "${values[@]}"
+          replace_group_in_file "$out_file" "$replacement" "$group_values" "${group_excludes:-}"
           break
           ;;
         q|Q|quit|QUIT)

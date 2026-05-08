@@ -514,6 +514,21 @@ rg -q 'Login: \*\*\*1\*' "$DECODE_TMP/bulk.redacted.txt" || fail "replace-all sh
 rg -q 'Partner: \*\*\*2\*' "$DECODE_TMP/bulk.redacted.txt" || fail "replace-all should redact second-group candidates without prompting"
 pass "pii replace-all on grouped candidate input"
 
+cat > "$DECODE_TMP/pii-exclude.decoded.txt" <<'EOF'
+Nickname: いし
+Polite phrase: お願いします
+EOF
+cat > "$DECODE_TMP/pii-exclude-candidates.txt" <<'EOF'
+いし
+-願いし
+EOF
+
+"$ROOT_DIR/loglm-decode" --review-pii --replace-all "$DECODE_TMP/pii-exclude-candidates.txt" "$DECODE_TMP/pii-exclude.decoded.txt" > /tmp/loglm-test-pii-exclude.out 2> /tmp/loglm-test-pii-exclude.err
+rg -q 'Nickname: \*\*\*1\*' "$DECODE_TMP/pii-exclude.redacted.txt" || fail "pii exclude should still redact standalone candidate values"
+rg -q 'Polite phrase: お願いします' "$DECODE_TMP/pii-exclude.redacted.txt" || fail "pii exclude should keep candidate values inside excluded strings"
+rg -Fq 'excludes: 願いし' /tmp/loglm-test-pii-exclude.out || fail "pii review should show group exclusions"
+pass "pii group exclusions"
+
 # 4) install-node runtime behavior for missing NVM_DIR
 NODE_TMP="$(/usr/bin/mktemp -d)"
 trap 'rm -rf "$TMP_WORK" "$NODE_TMP" "$DECODE_TMP" "$CLAUDE_TMP"' EXIT

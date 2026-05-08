@@ -2,6 +2,9 @@
 #   loglm-decode --review-pii examples/pii-candidates.txt logs/*.decoded.txt
 # Empty lines separate person/entity groups.
 # Each non-empty line in a group is treated as an alias of the same person/entity.
+# Lines beginning with - are exclusion strings for that group.
+# Example: add "いし" and "-願いし" to redact the nickname "いし"
+# while preserving "お願いします".
 # Lines beginning with # are ignored.
 
 斉藤賢爾
