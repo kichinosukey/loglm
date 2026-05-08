@@ -291,6 +291,9 @@ cat > "$DECODE_TMP/loglm-claude-log-20260501-052000-pid7.txt" <<'EOF'
 ❯ はじめよう
 ⏺ 環境チェック完了！
 今回書く論文は何のためのもの？
+
+Resume this session with:
+claude --resume 11111111-1111-1111-1111-111111111111
 EOF
 cat > "$DECODE_TMP/loglm-claude-log-20260501-053000-pid8.txt" <<'EOF'
 ===== loglm start [claude]: 2026-05-01 05:30:00 +0900 =====
@@ -313,6 +316,9 @@ extra redraw line not present in previous log
 今回書く論文は何のためのもの？
 ❯ /exit
 ❯ Plonky
+
+Resume this session with:
+claude --resume 11111111-1111-1111-1111-111111111111
 EOF
 
 run_cmd "$ROOT_DIR/loglm-decode" "$DECODE_TMP/loglm-claude-log-20260501-052000-pid7.txt"
@@ -322,6 +328,46 @@ run_cmd env LOGLM_DECODE_MIN_OVERLAP_LINES=4 LOGLM_DECODE_MIN_OVERLAP_CHARS=60 \
 rg -q '^❯ /exit$' "$DECODE_TMP/loglm-claude-log-20260501-053000-pid8.decoded.txt" || fail "decode should keep first new Claude prompt after replay"
 rg -q '^❯ Plonky$' "$DECODE_TMP/loglm-claude-log-20260501-053000-pid8.decoded.txt" || fail "decode should keep later new Claude prompts after replay"
 pass "decode trims Claude leading replay with redraw variations"
+
+cat > "$DECODE_TMP/loglm-claude-log-20260501-054000-pid9.txt" <<'EOF'
+===== loglm start [claude]: 2026-05-01 05:40:00 +0900 =====
+
+❯ unrelated prompt
+⏺ unrelated response
+
+Resume this session with:
+claude --resume 22222222-2222-2222-2222-222222222222
+EOF
+cat > "$DECODE_TMP/loglm-claude-log-20260501-055000-pid10.txt" <<'EOF'
+===== loglm start [claude]: 2026-05-01 05:50:00 +0900 =====
+
+Claude Code v2.1.126
+❯ しりとりしよう
+⏺ いいよ！じゃあ始めよう。
+しりとり
+「り」からどうぞ！
+❯ 倫理
+⏺ 倫理（りんり）
+「り」から！
+❯ ごま
+⏺ ごま（胡麻）
+「ま」から！
+❯ はじめよう
+⏺ 環境チェック完了！
+今回書く論文は何のためのもの？
+❯ same session continued
+⏺ continued response
+
+Resume this session with:
+claude --resume 11111111-1111-1111-1111-111111111111
+EOF
+
+run_cmd "$ROOT_DIR/loglm-decode" "$DECODE_TMP/loglm-claude-log-20260501-054000-pid9.txt"
+run_cmd env LOGLM_DECODE_MIN_OVERLAP_LINES=4 LOGLM_DECODE_MIN_OVERLAP_CHARS=60 \
+  "$ROOT_DIR/loglm-decode" "$DECODE_TMP/loglm-claude-log-20260501-055000-pid10.txt"
+! rg -q '^❯ しりとりしよう$' "$DECODE_TMP/loglm-claude-log-20260501-055000-pid10.decoded.txt" || fail "decode should use Claude session ID to trim replay across intervening logs"
+rg -q '^❯ same session continued$' "$DECODE_TMP/loglm-claude-log-20260501-055000-pid10.decoded.txt" || fail "decode should keep new content after same-session replay"
+pass "decode prefers matching Claude session ID over intervening logs"
 
 cat > "$DECODE_TMP/loglm-gemini-log-20260403-223849-pid84024.txt" <<'EOF'
 ===== loglm start [gemini]: 2026-04-03 22:38:49 +0900 =====

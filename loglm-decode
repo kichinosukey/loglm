@@ -23,6 +23,8 @@ Behavior:
     Example: logs/codex-log-20260217.txt -> logs/codex-log-20260217.decoded.txt
   - By default, overlapping leading context shared with the previous log
     in the same series is trimmed from the current decoded output.
+    For Claude logs, a matching "claude --resume <UUID>" session ID is
+    preferred over simple filename order when that ID is available.
   - With --review-pii, the first positional argument is a grouped
     pii-candidates.txt file and the remaining positional arguments are logs.
   - Empty lines in pii-candidates.txt separate person/entity groups.
@@ -604,9 +606,22 @@ print STDOUT encode("UTF-8", $out);
   echo "decoded: $in_file -> $out_file"
 }
 
+extract_claude_resume_id() {
+  local in_file="$1"
+  perl -ne '
+    while (/claude\s+--resume\s+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/ig) {
+      $id = lc $1;
+    }
+    END {
+      print "$id\n" if defined $id;
+    }
+  ' "$in_file"
+}
+
 find_previous_log_in_series() {
   local in_file="$1"
   local dir base prefix prev candidate candidate_base
+  local current_session candidate_session session_prev
   dir="$(dirname "$in_file")"
   base="$(basename "$in_file")"
 
@@ -614,6 +629,10 @@ find_previous_log_in_series() {
     return 1
   fi
   prefix="${BASH_REMATCH[1]}"
+  current_session=""
+  if [[ "$base" == loglm-claude-log-* ]]; then
+    current_session="$(extract_claude_resume_id "$in_file")"
+  fi
 
   while IFS= read -r candidate; do
     candidate_base="$(basename "$candidate")"
@@ -621,8 +640,19 @@ find_previous_log_in_series() {
     [[ "$candidate_base" == "$base" ]] && continue
     if [[ "$candidate_base" < "$base" ]]; then
       prev="$candidate"
+      if [[ -n "$current_session" ]]; then
+        candidate_session="$(extract_claude_resume_id "$candidate")"
+        if [[ "$candidate_session" == "$current_session" ]]; then
+          session_prev="$candidate"
+        fi
+      fi
     fi
   done < <(find "$dir" -maxdepth 1 -type f -name "${prefix}*.txt" | LC_ALL=C sort)
+
+  if [[ -n "${session_prev:-}" ]]; then
+    printf '%s\n' "$session_prev"
+    return 0
+  fi
 
   [[ -n "${prev:-}" ]] || return 1
   printf '%s\n' "$prev"
