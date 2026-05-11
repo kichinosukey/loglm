@@ -123,6 +123,7 @@ my $last_csi_param = q{};
 my $profile = $ENV{LOGLM_DECODE_PROFILE} // q{};
 my $is_claude = ($profile eq "claude") ? 1 : 0;
 my $is_gemini = ($profile eq "gemini") ? 1 : 0;
+my $is_codex = ($profile eq "codex") ? 1 : 0;
 
 while (read(STDIN, $c, 1)) {
   my $b = ord($c);
@@ -462,6 +463,34 @@ if ($is_claude) {
     ) {
       push @normalized, "> $pending_prompt";
     }
+  }
+
+  @merged = @normalized;
+} elsif ($is_codex) {
+  my @normalized = ();
+  my $placeholder = qr/(?:Write tests for \@filename|Explain this codebase|Improve documentation in \@filename|Implement \{feature\})/;
+  my $status = qr/gpt-[[:alnum:]._-]+\s+[[:alnum:]._-]+\s*\x{00B7}\s*~/;
+
+  for my $raw (@lines) {
+    my $line = $raw;
+
+    # Codex TUI records the empty composer placeholder in script(1) logs.
+    # Drop only fragments tied to the prompt/status bar, not quoted user text.
+    next if $line =~ /^\s*[\x{203A}>]?\s*$placeholder\s*$/;
+    next if $line =~ /^\s*$status\s*$/;
+    1 while $line =~ s/[\x{203A}>]\s*$placeholder\s*$status//g;
+    1 while $line =~ s/$placeholder\s*$status//g;
+    1 while $line =~ s/$status\s*[\x{203A}>]\s*$placeholder//g;
+    1 while $line =~ s/($status)\s*$placeholder/$1/g;
+    if ($line =~ /$status/) {
+      1 while $line =~ s/$placeholder//g;
+    }
+    1 while $line =~ s/(?<!\s)$placeholder\z//g;
+
+    next if $line =~ /^\s*$/ && $raw =~ /$placeholder/;
+    next if $line =~ /^\s*[\x{203A}>]?\s*$placeholder\s*$status\s*$/;
+
+    push @normalized, $line;
   }
 
   @merged = @normalized;
