@@ -12,16 +12,16 @@ LOGLM_HOME="${LOGLM_HOME:-$HOME/.local/share/loglm}"
 SETUP_DIR=""
 LOGLM_VERSION="0.1.7"
 
-SUPPORTED_AGENTS=(codex claude gemini)
+SUPPORTED_AGENTS=(codex claude gemini antigravity cursor)
 
 usage() {
   cat <<'EOF'
 Usage:
   loglm [options]
-  loglm agent install <github_repo_or_url|local_repo_path> [--agent codex|claude|gemini|all]
-  loglm agent list [--agent codex|claude|gemini|all]
-  loglm agent remove <github_repo_or_url|local_repo_path> [--agent codex|claude|gemini|all]
-  loglm agent update <github_repo_or_url|local_repo_path|--all> [--agent codex|claude|gemini|all]
+  loglm agent install <github_repo_or_url|local_repo_path> [--agent codex|claude|gemini|antigravity|cursor|all]
+  loglm agent list [--agent codex|claude|gemini|antigravity|cursor|all]
+  loglm agent remove <github_repo_or_url|local_repo_path> [--agent codex|claude|gemini|antigravity|cursor|all]
+  loglm agent update <github_repo_or_url|local_repo_path|--all> [--agent codex|claude|gemini|antigravity|cursor|all]
 
 Options:
   --new
@@ -29,7 +29,7 @@ Options:
   --resume
       Open the agent's built-in session picker.
   --agent
-      Re-select the AI coding agent (codex / claude / gemini).
+      Re-select the AI coding agent (codex / claude / gemini / antigravity / cursor).
   --daily-log
       Use one log file per day (legacy behavior).
       By default, loglm creates a unique file per launch (timestamp + PID).
@@ -38,6 +38,8 @@ Options:
         codex  : --dangerously-bypass-approvals-and-sandbox
         claude : --dangerously-skip-permissions
         gemini : --yolo
+        antigravity : --dangerously-skip-permissions
+        cursor : N/A
   -h, --help
       Show this help.
   -v, --version
@@ -45,7 +47,7 @@ Options:
 
 Subcommands:
   agent ...
-      Manage prompt-agent blocks in AGENTS.md / CLAUDE.md / GEMINI.md.
+      Manage prompt-agent blocks in AGENTS.md / CLAUDE.md / GEMINI.md / ANTIGRAVITY.md / CURSOR.md.
 EOF
 }
 
@@ -354,6 +356,19 @@ case "$AGENT" in
     else
       AGENT_CMD=("${BASE_CMD[@]}" --resume)
     fi
+    ;;
+
+  antigravity)
+    BASE_CMD=(agy)
+    if [[ "$DANGEROUS_MODE" -eq 1 ]]; then
+      BASE_CMD+=(--dangerously-skip-permissions)
+    fi
+    AGENT_CMD=("${BASE_CMD[@]}")
+    ;;
+
+  cursor)
+    BASE_CMD=(cursor-agent)
+    AGENT_CMD=("${BASE_CMD[@]}")
     ;;
 esac
 

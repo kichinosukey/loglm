@@ -13,10 +13,10 @@ resolve_lang
 usage() {
   cat <<'EOF'
 Usage:
-  loglm agent install <github_repo_or_url|local_repo_path> [--agent codex|claude|gemini|all]
-  loglm agent list [--agent codex|claude|gemini|all] [--verbose]
-  loglm agent remove <github_repo_or_url|local_repo_path> [--agent codex|claude|gemini|all]
-  loglm agent update <github_repo_or_url|local_repo_path|--all> [--agent codex|claude|gemini|all]
+  loglm agent install <github_repo_or_url|local_repo_path> [--agent codex|claude|gemini|antigravity|cursor|all]
+  loglm agent list [--agent codex|claude|gemini|antigravity|cursor|all] [--verbose]
+  loglm agent remove <github_repo_or_url|local_repo_path> [--agent codex|claude|gemini|antigravity|cursor|all]
+  loglm agent update <github_repo_or_url|local_repo_path|--all> [--agent codex|claude|gemini|antigravity|cursor|all]
 
 Examples:
   loglm agent install ks91/gamer-pat
@@ -98,14 +98,7 @@ display_name_for_spec() {
 }
 
 target_file_for_agent() {
-  case "$1" in
-    codex) printf '%s\n' "AGENTS.md" ;;
-    claude) printf '%s\n' "CLAUDE.md" ;;
-    gemini) printf '%s\n' "GEMINI.md" ;;
-    *)
-      return 1
-      ;;
-  esac
+  get_agent_target_file "$1"
 }
 
 source_candidates_for_agent() {
@@ -120,6 +113,14 @@ source_candidates_for_agent() {
       ;;
     gemini)
       printf '%s\n' "AGENT_INSTALL_GEMINI.md"
+      printf '%s\n' "AGENT_INSTALL.md"
+      ;;
+    antigravity)
+      printf '%s\n' "AGENT_INSTALL_ANTIGRAVITY.md"
+      printf '%s\n' "AGENT_INSTALL.md"
+      ;;
+    cursor)
+      printf '%s\n' "AGENT_INSTALL_CURSOR.md"
       printf '%s\n' "AGENT_INSTALL.md"
       ;;
     *)
@@ -162,8 +163,9 @@ write_repo_prompt_file() {
 
 spec_is_referenced_anywhere() {
   local spec="$1"
-  local file
-  for file in AGENTS.md CLAUDE.md GEMINI.md; do
+  local agent file
+  for agent in $(get_supported_agents); do
+    file="$(get_agent_target_file "$agent")"
     [[ -f "$file" ]] || continue
     if grep -Fq "repo=$spec " "$file"; then
       return 0
@@ -622,7 +624,7 @@ list_installed_blocks() {
   local found=0
   local repo source pav prompt
 
-  for agent in codex claude gemini; do
+  for agent in $(get_supported_agents); do
     if [[ "$scope" != "all" && "$scope" != "$agent" ]]; then
       continue
     fi
@@ -671,7 +673,7 @@ remove_repo_from_agent_file() {
 repos_from_files() {
   local scope="$1"
   local file
-  for agent in codex claude gemini; do
+  for agent in $(get_supported_agents); do
     if [[ "$scope" != "all" && "$scope" != "$agent" ]]; then
       continue
     fi
@@ -688,7 +690,7 @@ run_install() {
   local installed=0
   local failed=0
 
-  for agent in codex claude gemini; do
+  for agent in $(get_supported_agents); do
     if [[ "$scope" != "all" && "$scope" != "$agent" ]]; then
       continue
     fi
@@ -761,7 +763,7 @@ run_runtime_notes() {
   local quiet="$3"
   local agent
 
-  for agent in codex claude gemini; do
+  for agent in $(get_supported_agents); do
     if [[ "$scope" != "all" && "$scope" != "$agent" ]]; then
       continue
     fi
@@ -835,10 +837,10 @@ while (($# > 0)); do
 done
 
 case "$SCOPE" in
-  codex|claude|gemini|all) ;;
+  codex|claude|gemini|antigravity|cursor|all) ;;
   *)
-    say "--agent は codex/claude/gemini/all のいずれかを指定してください。" \
-        "--agent must be one of: codex/claude/gemini/all." >&2
+    say "--agent は codex/claude/gemini/antigravity/cursor/all のいずれかを指定してください。" \
+        "--agent must be one of: codex/claude/gemini/antigravity/cursor/all." >&2
     exit 2
     ;;
 esac
@@ -875,7 +877,7 @@ case "$SUBCMD" in
           "Invalid source spec: $TARGET_SPEC" >&2
       exit 2
     fi
-    for agent in codex claude gemini; do
+    for agent in $(get_supported_agents); do
       if [[ "$SCOPE" != "all" && "$SCOPE" != "$agent" ]]; then
         continue
       fi

@@ -234,3 +234,27 @@ activate_nvm_default_if_available() {
 
   command -v npm > /dev/null 2>&1
 }
+
+get_supported_agents() {
+  printf '%s\n' "codex claude gemini antigravity cursor"
+}
+
+get_agent_target_file() {
+  case "$1" in
+    codex) printf '%s\n' "AGENTS.md" ;;
+    claude) printf '%s\n' "CLAUDE.md" ;;
+    gemini) printf '%s\n' "GEMINI.md" ;;
+    antigravity) printf '%s\n' "ANTIGRAVITY.md" ;;
+    cursor) printf '%s\n' "CURSOR.md" ;;
+    *) return 1 ;;
+  esac
+}
+
+get_agent_command() {
+  case "$1" in
+    antigravity) printf '%s\n' "agy" ;;
+    cursor) printf '%s\n' "cursor-agent" ;;
+    *) printf '%s\n' "$1" ;;
+  esac
+}
+

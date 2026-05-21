@@ -112,6 +112,9 @@ install_executable "setup/agent-install.sh" "$SETUP_DIR/agent-install.sh"
 install_executable "setup/agent-codex.sh" "$SETUP_DIR/agent-codex.sh"
 install_executable "setup/agent-claude.sh" "$SETUP_DIR/agent-claude.sh"
 install_executable "setup/agent-gemini.sh" "$SETUP_DIR/agent-gemini.sh"
+install_executable "setup/agent-antigravity.sh" "$SETUP_DIR/agent-antigravity.sh"
+install_executable "setup/agent-cursor.sh" "$SETUP_DIR/agent-cursor.sh"
+
 
 echo "Installed: $BIN_DIR/loglm"
 echo "Installed: $BIN_DIR/loglm-decode"

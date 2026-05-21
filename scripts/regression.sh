@@ -196,6 +196,26 @@ rg -q '^› actually new prompt$' "$DECODE_TMP/loglm-codex-log-20260403-023000-p
 ! rg -q '^› replayed prompt$' "$DECODE_TMP/loglm-codex-log-20260403-023000-pid23.decoded.txt" || fail "decode should drop Codex leading replay before context compaction when no actions occurred"
 pass "decode trims Codex leading replay before context compaction"
 
+cat > "$DECODE_TMP/loglm-codex-log-20260403-024000-pid24.txt" <<'EOF'
+===== loglm start [codex]: 2026-04-03 02:40:00 +0900 =====
+
+› Write tests for @filename
+gpt-5.5 low · ~
+› Explain this codebase gpt-5.5 low · ~
+gpt-5.5 low · ~ › Improve documentation in @filename
+› user-entered prompt text
+› /command-like user text
+› open docs/example.md and summarize it
+assistant response
+EOF
+
+run_cmd "$ROOT_DIR/loglm-decode" "$DECODE_TMP/loglm-codex-log-20260403-024000-pid24.txt"
+! rg -q 'Write tests for @filename|Explain this codebase|Improve documentation in @filename|Implement \{feature\}' "$DECODE_TMP/loglm-codex-log-20260403-024000-pid24.decoded.txt" || fail "decode should drop Codex empty composer placeholders"
+rg -q '^› user-entered prompt text$' "$DECODE_TMP/loglm-codex-log-20260403-024000-pid24.decoded.txt" || fail "decode should keep normal Codex user prompt text"
+rg -q '^› /command-like user text$' "$DECODE_TMP/loglm-codex-log-20260403-024000-pid24.decoded.txt" || fail "decode should keep command-like Codex user prompt text"
+rg -q '^› open docs/example\.md and summarize it$' "$DECODE_TMP/loglm-codex-log-20260403-024000-pid24.decoded.txt" || fail "decode should keep Codex prompts with file paths"
+pass "decode filters Codex empty composer placeholders"
+
 cat > "$DECODE_TMP/loglm-claude-log-20260403-030000-pid3.txt" <<'EOF'
 ===== loglm start [claude]: 2026-04-03 03:00:00 +0900 =====
 
