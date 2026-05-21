@@ -9,14 +9,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 resolve_lang
 
 if (($# != 1)); then
-  say "使い方: $0 <codex|claude|gemini>" \
-      "Usage: $0 <codex|claude|gemini>" >&2
+  say "使い方: $0 <codex|claude|gemini|antigravity|cursor>" \
+      "Usage: $0 <codex|claude|gemini|antigravity|cursor>" >&2
   exit 2
 fi
 
 AGENT="$1"
 case "$AGENT" in
-  codex|claude|gemini) ;;
+  codex|claude|gemini|antigravity|cursor) ;;
   *)
     say "エラー: 未対応のエージェントです: $AGENT" \
         "Error: unsupported agent: $AGENT" >&2
@@ -24,28 +24,30 @@ case "$AGENT" in
     ;;
 esac
 
-if command -v "$AGENT" > /dev/null 2>&1; then
+AGENT_CMD="$(get_agent_command "$AGENT")"
+
+if command -v "$AGENT_CMD" > /dev/null 2>&1; then
   exit 0
 fi
 
 "$SCRIPT_DIR/doctor.sh" "$AGENT"
 
-say "'$AGENT' コマンドが未インストールです。" \
-    "The '$AGENT' command is not installed."
+say "'$AGENT_CMD' コマンドが未インストールです。" \
+    "The '$AGENT_CMD' command is not installed."
 
 if prompt_yes_no \
   "$AGENT を今インストールしますか？" \
   "Install $AGENT now?"; then
   "$SCRIPT_DIR/agent-$AGENT.sh"
 else
-  say "インストールを中止しました。'$AGENT' を導入して再実行してください。" \
-      "Install cancelled. Please install '$AGENT' and retry." >&2
+  say "インストールを中止しました。'$AGENT_CMD' を導入して再実行してください。" \
+      "Install cancelled. Please install '$AGENT_CMD' and retry." >&2
   exit 1
 fi
 
-if ! command -v "$AGENT" > /dev/null 2>&1; then
-  say "エラー: インストール後も '$AGENT' が PATH に見つかりません。" \
-      "Error: installation finished but '$AGENT' is still not available in PATH." >&2
+if ! command -v "$AGENT_CMD" > /dev/null 2>&1; then
+  say "エラー: インストール後も '$AGENT_CMD' が PATH に見つかりません。" \
+      "Error: installation finished but '$AGENT_CMD' is still not available in PATH." >&2
   say "新しいシェルを開いて再実行するか、PATH 設定を確認してください。" \
       "Open a new shell and retry, or verify your PATH settings." >&2
   exit 1
