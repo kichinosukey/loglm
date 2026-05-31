@@ -479,6 +479,8 @@ if ($is_claude) {
   my @normalized = ();
   my $pending_prompt;
   my $last_emitted_prompt;
+  my $in_slash_menu = 0;
+  my $in_hermes_banner = 0;
 
   for my $raw (@lines) {
     my $line = $raw;
@@ -491,17 +493,78 @@ if ($is_claude) {
     $line =~ s/\s+$//;
 
     next if $line eq q{};
+
+    if ($is_hermes && $line =~ /^Available Tools$/) {
+      $in_hermes_banner = 1;
+      next;
+    }
+    if ($in_hermes_banner) {
+      if ($line =~ /^(?:Welcome to Hermes Agent!|[0-9]+ tools · [0-9]+ skills · \/help for commands)/) {
+        $in_hermes_banner = 0;
+      }
+      next;
+    }
+
+    if ($in_slash_menu) {
+      if (
+        $line =~ /^→\s+/ ||
+        $line =~ /^[a-z][a-z0-9-]*(?:\s{2,}|\t+).+/i ||
+        $line =~ /^exit\s+Exit the CLI/i ||
+        $line =~ /^[a-z][a-z0-9-]*\s*$/i
+      ) {
+        next;
+      }
+      $in_slash_menu = 0;
+    }
+
     next if $line =~ /^\? for shortcuts$/i;
     next if $line =~ /^esc to interrupt/i;
     next if $line =~ /^Try ".*"$/;
+    next if $line =~ /^Script started on /;
+    next if $line =~ /^◇$/;
+    next if $line =~ /^[-─]+ Hermes Agent\b/;
     next if $line =~ /^OpenClaw(?: CLI)? v?[0-9.]+/i;
     next if $line =~ /^Hermes(?: Agent)? v?[0-9.]+/i;
+    next if $line =~ /^Welcome to Hermes Agent!/i;
+    next if $line =~ /^✦ Tip:/;
+    next if $line =~ /^appear without manual intervention\./;
+    next if $line =~ /^openclaw tui\b/i;
+    next if $line =~ /^local ready \|/i;
+    next if $line =~ /^agent main \|/i;
+    next if $line =~ /^session agent:/i;
+    next if $line =~ /^loglm-\d{8}-\d{6}-pid\d+$/;
+    next if $line =~ /^\?\/[0-9.]+k$/i;
+    next if $line =~ /^tokens [0-9.]+k\/[0-9.]+k \(\d+%\)$/i;
     next if $line =~ /^starting agent/i;
+    next if $line =~ /^Initializing agent/i;
     next if $line =~ /^ready\s*$/i;
-    next if $line =~ /^(?:thinking|running|forging session|resuming)(?:…|\.\.\.)?$/i;
+    next if $line =~ /^(?:thinking|running|working|loading|starting|forging session|resuming)(?:…|\.\.\.)?$/i;
+    next if $line =~ /^(?:\S+\s+)?(?:pondering|moseying|bamboozling|kerfuffling|brainstorming|reflecting|cogitating|twiddling thumbs)(?:…|\.\.\.)?(?:\s+•\s+\d+s.*)?$/i;
+    next if length($line) <= 100 && $line =~ /\b(?:analyzing|reflecting|formulating|computing|reasoning|ruminating|mulling|deliberating|pondering|cogitating)\.\.\.$/i;
     next if $line =~ /^\s*(?:[·✢✳✶✻✽⏺☤]+|[⠁-⣿]+)\s*$/u;
-    next if $line =~ /^\s*(?:[·✢✳✶✻✽⏺☤⠁-⣿]+\s*)?(?:thinking|running|working|loading|starting|resuming)(?:…|\.\.\.)?(?:\s+\([^)]+\))?\s*$/iu;
+    next if $line =~ /^\s*(?:[·✢✳✶✻✽⏺☤⠁-⣿◉ಠ_()⌐■]+\s*)?(?:thinking|running|working|loading|starting|resuming|brainstorming|reflecting|cogitating)(?:…|\.\.\.)?(?:\s+\([^)]+\))?\s*$/iu;
     next if $line =~ /^\s*(?:[\x{2580}-\x{259F}\x{2800}-\x{28FF}]+\s*)+$/u;
+    next if $line =~ /^⚕\s+[^│]+│.*(?:ctx --|[0-9.]+K?\/[0-9.]+K|[0-9]+\/[0-9]+K).*$/u;
+    next if $line =~ /^.*⚕\s+[^│]+│.*(?:ctx --|[0-9.]+K?\/[0-9.]+K|[0-9]+\/[0-9]+K).*$/u;
+    next if $line =~ /^⚕\s+❯\s+msg=interrupt\b/u;
+    next if $line =~ /^[0-9.]+K?\/\s*[0-9.]+\s*K?\s*│.*$/u;
+    next if $line =~ /^─\s*⚕\s+Hermes\s*─/u;
+    next if $line =~ /^⚙️\s+\/exit$/u;
+    next if $line =~ /^Exit the CLI \(use --delete to also /;
+    next if $line =~ /^⚡ Hand-drawn /;
+    next if $line =~ /^[0-9]+$/ && $is_hermes;
+    next if $line =~ /^[0-9]+s$/ && $is_hermes;
+    next if $line =~ /^[[:alpha:]]$/ && $is_hermes;
+    next if $line =~ /^[[:alpha:]]{2,4}$/ && $is_hermes;
+    next if $line =~ /^[[:alpha:]]{2,4}\s+\(\s*\d+(?:\.\d+)?s\)$/ && $is_hermes;
+    next if $line =~ /^[[:alpha:]]\s+.*(?:\|\s*head|true)$/ && $is_hermes;
+    next if $line =~ /^[[:alpha:]](?:\s+[[:alnum:][:punct:]])+.*\(\s*\d+(?:\.\d+)?s\)$/ && $is_hermes;
+    next if $line =~ /^.{1,40}\s+[0-9]+$/ && $is_hermes && $line !~ /[。.!?]$/;
+
+    if ($line =~ m{^/[A-Za-z]*$}) {
+      $in_slash_menu = 1;
+      next;
+    }
 
     if ($line =~ /^(?:[❯>›]\s*)(.*)$/) {
       my $p = $1;
@@ -541,8 +604,8 @@ if ($is_claude) {
   @merged = @lines;
 }
 
-if ($is_claude) {
-  # If a later complete prompt redraw exists, drop the partial staircase echo
+if ($is_claude || $is_hermes) {
+  # If a later complete prompt redraw exists, drop the partial echo
   # that is a suffix of it (e.g. "oglm..." before "❯ loglm ...").
   my @filtered = ();
   for (my $i = 0; $i < @merged; $i++) {
@@ -551,6 +614,7 @@ if ($is_claude) {
     $curr_cmp =~ s/^\s+//;
     $curr_cmp =~ s/\s+$//;
     $curr_cmp =~ s/^[❯>›]\s*//;
+    $curr_cmp =~ s/^●\s*//;
     $curr_cmp =~ s/\s+//g;
 
     my $drop = 0;
@@ -559,11 +623,12 @@ if ($is_claude) {
       $limit = $#merged if $limit > $#merged;
       for my $j ($i + 1 .. $limit) {
         my $next = $merged[$j];
-        next unless $next =~ /^\s*[❯>›]\s*\S/;
+        next unless $next =~ /^\s*(?:[❯>›]|●)\s*\S/;
         my $next_cmp = $next;
         $next_cmp =~ s/^\s+//;
         $next_cmp =~ s/\s+$//;
         $next_cmp =~ s/^[❯>›]\s*//;
+        $next_cmp =~ s/^●\s*//;
         $next_cmp =~ s/\s+//g;
         if (length($next_cmp) > length($curr_cmp) && substr($next_cmp, -length($curr_cmp)) eq $curr_cmp) {
           $drop = 1;

@@ -440,6 +440,10 @@ cat > "$DECODE_TMP/loglm-openclaw-log-20260531-010000-pid31.txt" <<'EOF'
 OpenClaw v0.0.0
 ────────────────────────────────
 ? for shortcuts
+local ready | idle
+agent main | session loglm-20260531-010000-pid31 | openai/gpt-5.5 | tokens 1k/200k
+loglm-20260531-010000-pid31
+?/200k
 > w
 > wr
 > write tests
@@ -447,7 +451,7 @@ Thinking...
 I will inspect the project.
 EOF
 run_cmd "$ROOT_DIR/loglm-decode" "$DECODE_TMP/loglm-openclaw-log-20260531-010000-pid31.txt"
-! rg -q 'OpenClaw v0\.0\.0|\\? for shortcuts|Thinking' "$DECODE_TMP/loglm-openclaw-log-20260531-010000-pid31.decoded.txt" || fail "decode should drop OpenClaw TUI noise"
+! rg -q 'OpenClaw v0\.0\.0|\\? for shortcuts|Thinking|local ready|agent main|\\?/200k|loglm-20260531' "$DECODE_TMP/loglm-openclaw-log-20260531-010000-pid31.decoded.txt" || fail "decode should drop OpenClaw TUI noise"
 rg -q '^> write tests$' "$DECODE_TMP/loglm-openclaw-log-20260531-010000-pid31.decoded.txt" || fail "decode should keep final OpenClaw prompt"
 rg -q '^I will inspect the project\.$' "$DECODE_TMP/loglm-openclaw-log-20260531-010000-pid31.decoded.txt" || fail "decode should keep OpenClaw response text"
 pass "decode OpenClaw UI noise"
@@ -458,6 +462,15 @@ cat > "$DECODE_TMP/loglm-hermes-log-20260531-011000-pid32.txt" <<'EOF'
 Hermes Agent v0.0.0
 ────────────────────────────────
 ? for shortcuts
+Available Tools
+browser: browser_back
+29 tools · 87 skills · /help for commands
+Welcome to Hermes Agent! Type your message or /help for commands.
+su
+mmarize logs
+● summarize logs
+⚕ gpt-5.5 │ ctx -- │ [░░░░░░░░░░] -- │ 1s │ ⏲ 0s
+⚕ ❯ msg=interrupt · /queue · /bg · /steer · Ctrl+C cancel
 > s
 > su
 > summarize logs
@@ -465,8 +478,9 @@ Running...
 Summary follows.
 EOF
 run_cmd "$ROOT_DIR/loglm-decode" "$DECODE_TMP/loglm-hermes-log-20260531-011000-pid32.txt"
-! rg -q 'Hermes Agent v0\.0\.0|\\? for shortcuts|Running' "$DECODE_TMP/loglm-hermes-log-20260531-011000-pid32.decoded.txt" || fail "decode should drop Hermes TUI noise"
+! rg -q 'Hermes Agent v0\.0\.0|\\? for shortcuts|Running|Available Tools|Welcome to Hermes|ctx --|msg=interrupt|^mmarize logs$' "$DECODE_TMP/loglm-hermes-log-20260531-011000-pid32.decoded.txt" || fail "decode should drop Hermes TUI noise"
 rg -q '^> summarize logs$' "$DECODE_TMP/loglm-hermes-log-20260531-011000-pid32.decoded.txt" || fail "decode should keep final Hermes prompt"
+rg -q '^● summarize logs$' "$DECODE_TMP/loglm-hermes-log-20260531-011000-pid32.decoded.txt" || fail "decode should keep final Hermes confirmed prompt"
 rg -q '^Summary follows\.$' "$DECODE_TMP/loglm-hermes-log-20260531-011000-pid32.decoded.txt" || fail "decode should keep Hermes response text"
 pass "decode Hermes UI noise"
 
