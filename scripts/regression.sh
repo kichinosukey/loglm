@@ -759,7 +759,20 @@ rg -q 'loglm Platform Notes' "$EXPERIMENTAL_WORK/AGENTS.md" || fail "OpenClaw la
     LOGLM_TEST_SCRIPT_ARGS="$EXPERIMENTAL_TMP/hermes-script-args.out" \
     "$ROOT_DIR/loglm" >/tmp/loglm-test-hermes-launch.out 2>/tmp/loglm-test-hermes-launch.err
 )
-rg -q 'hermes --continue' "$EXPERIMENTAL_TMP/hermes-script-args.out" || fail "Hermes launch should resume context by default with --continue"
+rg -q '^.*hermes$' "$EXPERIMENTAL_TMP/hermes-script-args.out" || fail "Hermes launch should start normally when no previous session exists"
+! rg -q 'hermes --continue' "$EXPERIMENTAL_TMP/hermes-script-args.out" || fail "Hermes launch should not continue when no previous session exists"
+
+mkdir -p "$EXPERIMENTAL_TMP/home/.hermes/sessions"
+touch "$EXPERIMENTAL_TMP/home/.hermes/sessions/20260531_191136_d1cd26"
+(
+  cd "$EXPERIMENTAL_WORK"
+  printf 'hermes\n' > .loglm_agent
+  HOME="$EXPERIMENTAL_TMP/home" \
+    PATH="$EXPERIMENTAL_TMP/bin:$PATH" \
+    LOGLM_TEST_SCRIPT_ARGS="$EXPERIMENTAL_TMP/hermes-script-args.out" \
+    "$ROOT_DIR/loglm" >/tmp/loglm-test-hermes-launch-resume.out 2>/tmp/loglm-test-hermes-launch-resume.err
+)
+rg -q 'hermes --continue' "$EXPERIMENTAL_TMP/hermes-script-args.out" || fail "Hermes launch should resume when a previous session exists"
 pass "experimental agent launch commands"
 
 # 8) Managed block list/remove behavior

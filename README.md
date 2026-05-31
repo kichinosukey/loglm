@@ -139,7 +139,8 @@ LOGLM_LANG=both loglm
 - For Gemini, default launch uses `gemini --resume`; `--new` starts a new session.
   If context is not restored as expected, run `/resume` (or `/chat resume`) inside Gemini after launch.
 - For OpenClaw, default launch uses `openclaw tui --local`; `--new` starts a distinct `loglm-...` session key.
-- For Hermes Agent, default launch uses `hermes --continue` to keep context.
+- For Hermes Agent, default launch uses `hermes --continue` when a previous
+  Hermes CLI session is found; otherwise it launches `hermes` normally.
   `--new` launches `hermes` without `--continue`.
 - `--agent`: Re-select the AI coding agent (`codex` / `claude` / `gemini` / `openclaw` / `hermes`).
 - `--daily-log`: Use one log file per day (legacy behavior).

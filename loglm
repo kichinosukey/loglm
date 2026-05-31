@@ -98,6 +98,12 @@ claude_has_history() {
   compgen -G "$HOME/.claude/projects/$encoded/*.jsonl" > /dev/null 2>&1
 }
 
+hermes_has_history() {
+  compgen -G "$HOME/.hermes/sessions/*" > /dev/null 2>&1 ||
+    compgen -G "$HOME/.hermes/session*/*" > /dev/null 2>&1 ||
+    compgen -G "$HOME/.hermes/profiles/*/sessions/*" > /dev/null 2>&1
+}
+
 is_running_under_script() {
   local pid ppid comm
   pid="$$"
@@ -390,8 +396,10 @@ case "$AGENT" in
       AGENT_CMD=("${BASE_CMD[@]}")
     elif [[ "$CHOOSE_RESUME" -eq 1 ]]; then
       AGENT_CMD=("${BASE_CMD[@]}" --continue)
-    else
+    elif hermes_has_history; then
       AGENT_CMD=("${BASE_CMD[@]}" --continue)
+    else
+      AGENT_CMD=("${BASE_CMD[@]}")
     fi
     ;;
 esac
