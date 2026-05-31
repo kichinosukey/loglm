@@ -96,7 +96,7 @@ Experimental agents:
 - OpenClaw is launched as `openclaw tui --local`.
   - If missing, setup runs the official OpenClaw installer script.
   - OpenClaw requires Node.js 22+; the official installer handles Node detection/installation.
-- Hermes Agent is launched as `hermes --tui`.
+- Hermes Agent is launched as `hermes`.
   - If missing, setup runs the official Hermes Agent installer script.
   - The official installer handles dependencies such as uv, Python, Node.js, ripgrep, and ffmpeg.
 - OpenClaw and Hermes Agent support is experimental in loglm v0.2.x.
@@ -105,6 +105,16 @@ Experimental agents:
   the upstream official installers.
 - In `loglm`, `hermes` is the command/agent id for Hermes Agent. It refers to the
   Hermes Agent CLI/TUI project, not to the Hermes model family.
+- For OpenClaw prompt-agent installation, `loglm agent install ... --agent openclaw`
+  also creates a temporary `SKILL.md` wrapper and runs
+  `openclaw skills install <skill-dir> --as <repo-name>` when the `openclaw` command
+  is available. `AGENTS.md` is still updated with loglm runtime notes and a managed
+  reference block.
+- For Hermes Agent prompt-agent installation, `loglm agent install ... --agent hermes`
+  writes a skill wrapper to `~/.hermes/skills/research/<repo-name>/SKILL.md`.
+  `AGENTS.md` is still updated with loglm runtime notes and a managed reference block.
+  In Hermes, load the skill explicitly if needed with `/skill <repo-name>` or start
+  Hermes with `hermes -s <repo-name>`.
 
 Claude Code (all supported platforms):
 
@@ -129,7 +139,8 @@ LOGLM_LANG=both loglm
 - For Gemini, default launch uses `gemini --resume`; `--new` starts a new session.
   If context is not restored as expected, run `/resume` (or `/chat resume`) inside Gemini after launch.
 - For OpenClaw, default launch uses `openclaw tui --local`; `--new` starts a distinct `loglm-...` session key.
-- For Hermes Agent, default launch uses `hermes --tui`; `--resume` passes `--continue`.
+- For Hermes Agent, default launch uses `hermes --continue` to keep context.
+  `--new` launches `hermes` without `--continue`.
 - `--agent`: Re-select the AI coding agent (`codex` / `claude` / `gemini` / `openclaw` / `hermes`).
 - `--daily-log`: Use one log file per day (legacy behavior).
 - `-X`, `--dangerous`: Start the agent in dangerous/no-approval mode.

@@ -743,9 +743,9 @@ rg -q 'loglm Platform Notes' "$EXPERIMENTAL_WORK/AGENTS.md" || fail "OpenClaw la
   HOME="$EXPERIMENTAL_TMP/home" \
     PATH="$EXPERIMENTAL_TMP/bin:$PATH" \
     LOGLM_TEST_SCRIPT_ARGS="$EXPERIMENTAL_TMP/hermes-script-args.out" \
-    "$ROOT_DIR/loglm" --resume >/tmp/loglm-test-hermes-launch.out 2>/tmp/loglm-test-hermes-launch.err
+    "$ROOT_DIR/loglm" >/tmp/loglm-test-hermes-launch.out 2>/tmp/loglm-test-hermes-launch.err
 )
-rg -q 'hermes --tui --continue' "$EXPERIMENTAL_TMP/hermes-script-args.out" || fail "Hermes launch should use TUI continue mode on --resume"
+rg -q 'hermes --continue' "$EXPERIMENTAL_TMP/hermes-script-args.out" || fail "Hermes launch should resume context by default with --continue"
 pass "experimental agent launch commands"
 
 # 8) Managed block list/remove behavior
@@ -815,11 +815,28 @@ cat > "$LOCAL_REPO/AGENT_INSTALL_HERMES.md" <<'EOF'
 - Test Hermes-specific prompt install.
 EOF
 
-run_cmd env LOGLM_AGENT_INSTALL_NO_LAUNCH=1 "$ROOT_DIR/loglm" agent install "$LOCAL_REPO" --agent openclaw --force
+cat > "$TMP_WORK/openclaw" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" > "$OPENCLAW_SKILLS_ARGS_OUT"
+if [[ "$1" == "skills" && "$2" == "install" ]]; then
+  cp "$3/SKILL.md" "$OPENCLAW_SKILL_OUT"
+fi
+exit 0
+EOF
+chmod +x "$TMP_WORK/openclaw"
+
+run_cmd env LOGLM_AGENT_INSTALL_NO_LAUNCH=1 PATH="$TMP_WORK:$PATH" OPENCLAW_SKILLS_ARGS_OUT="$TMP_WORK/openclaw-skills-args.out" OPENCLAW_SKILL_OUT="$TMP_WORK/openclaw-SKILL.md" "$ROOT_DIR/loglm" agent install "$LOCAL_REPO" --agent openclaw --force
 LOCAL_REPO_CANON="$(cd "$LOCAL_REPO" && pwd -P)"
 rg -q "repo=local:$LOCAL_REPO_CANON agent=openclaw source=AGENT_INSTALL_OPENCLAW.md" AGENTS.md || fail "OpenClaw prompt-agent block should be installed into AGENTS.md"
-run_cmd env LOGLM_AGENT_INSTALL_NO_LAUNCH=1 "$ROOT_DIR/loglm" agent install "$LOCAL_REPO" --agent hermes --force
+rg -q "skills install .*/local-agent-src --as local-agent-src" "$TMP_WORK/openclaw-skills-args.out" || fail "OpenClaw prompt-agent install should call openclaw skills install"
+rg -q '^name: local-agent-src$' "$TMP_WORK/openclaw-SKILL.md" || fail "OpenClaw generated SKILL.md should include skill name"
+rg -q 'Test OpenClaw-specific prompt install' "$TMP_WORK/openclaw-SKILL.md" || fail "OpenClaw generated SKILL.md should include prompt-agent content"
+HERMES_HOME="$TMP_WORK/hermes-home"
+run_cmd env LOGLM_AGENT_INSTALL_NO_LAUNCH=1 HOME="$HERMES_HOME" "$ROOT_DIR/loglm" agent install "$LOCAL_REPO" --agent hermes --force
 rg -q "repo=local:$LOCAL_REPO_CANON agent=hermes source=AGENT_INSTALL_HERMES.md" AGENTS.md || fail "Hermes prompt-agent block should be installed into AGENTS.md"
+[[ -f "$HERMES_HOME/.hermes/skills/research/local-agent-src/SKILL.md" ]] || fail "Hermes prompt-agent install should write SKILL.md"
+rg -q '^name: local-agent-src$' "$HERMES_HOME/.hermes/skills/research/local-agent-src/SKILL.md" || fail "Hermes generated SKILL.md should include skill name"
+rg -q 'Test Hermes-specific prompt install' "$HERMES_HOME/.hermes/skills/research/local-agent-src/SKILL.md" || fail "Hermes generated SKILL.md should include prompt-agent content"
 pass "experimental agent prompt install works"
 
 # 9) Update validation

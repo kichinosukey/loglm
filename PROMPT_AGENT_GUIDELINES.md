@@ -42,6 +42,10 @@ Install output model:
 - `loglm agent install <owner/repo>` stores fetched content into `<REPO-NAME-UPPER>.md` in the current directory.
 - `AGENTS.md` / `CLAUDE.md` / `GEMINI.md` receive managed reference blocks that point to `<REPO-NAME-UPPER>.md`.
   OpenClaw and Hermes Agent currently use `AGENTS.md` as their experimental target.
+- For OpenClaw, `loglm` also wraps the selected install source as a temporary `SKILL.md`
+  and runs `openclaw skills install ... --as <repo-name>` when the OpenClaw CLI is available.
+- For Hermes Agent, `loglm` also wraps the selected install source as `SKILL.md`
+  under `~/.hermes/skills/research/<repo-name>/`.
 - Prompt-agent authors SHOULD design content assuming it will be consumed from that shared local file.
 
 Prompt-agent version metadata (recommended):
