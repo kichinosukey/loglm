@@ -19,6 +19,8 @@ TARGETS=(
   "$SETUP_DIR/agent-codex.sh"
   "$SETUP_DIR/agent-claude.sh"
   "$SETUP_DIR/agent-gemini.sh"
+  "$SETUP_DIR/agent-openclaw.sh"
+  "$SETUP_DIR/agent-hermes.sh"
 )
 
 removed=0

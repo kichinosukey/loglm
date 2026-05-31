@@ -9,14 +9,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 resolve_lang
 
 if (($# != 1)); then
-  say "使い方: $0 <codex|claude|gemini>" \
-      "Usage: $0 <codex|claude|gemini>" >&2
+  say "使い方: $0 <codex|claude|gemini|openclaw|hermes>" \
+      "Usage: $0 <codex|claude|gemini|openclaw|hermes>" >&2
   exit 2
 fi
 
 AGENT="$1"
 case "$AGENT" in
-  codex|claude|gemini) ;;
+  codex|claude|gemini|openclaw|hermes) ;;
   *)
     say "エラー: 未対応のエージェントです: $AGENT" \
         "Error: unsupported agent: $AGENT" >&2

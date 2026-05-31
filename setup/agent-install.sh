@@ -13,10 +13,10 @@ resolve_lang
 usage() {
   cat <<'EOF'
 Usage:
-  loglm agent install <github_repo_or_url|local_repo_path> [--agent codex|claude|gemini|all]
-  loglm agent list [--agent codex|claude|gemini|all] [--verbose]
-  loglm agent remove <github_repo_or_url|local_repo_path> [--agent codex|claude|gemini|all]
-  loglm agent update <github_repo_or_url|local_repo_path|--all> [--agent codex|claude|gemini|all]
+  loglm agent install <github_repo_or_url|local_repo_path> [--agent codex|claude|gemini|openclaw|hermes|all]
+  loglm agent list [--agent codex|claude|gemini|openclaw|hermes|all] [--verbose]
+  loglm agent remove <github_repo_or_url|local_repo_path> [--agent codex|claude|gemini|openclaw|hermes|all]
+  loglm agent update <github_repo_or_url|local_repo_path|--all> [--agent codex|claude|gemini|openclaw|hermes|all]
 
 Examples:
   loglm agent install ks91/gamer-pat
@@ -102,6 +102,8 @@ target_file_for_agent() {
     codex) printf '%s\n' "AGENTS.md" ;;
     claude) printf '%s\n' "CLAUDE.md" ;;
     gemini) printf '%s\n' "GEMINI.md" ;;
+    openclaw) printf '%s\n' "AGENTS.md" ;;
+    hermes) printf '%s\n' "AGENTS.md" ;;
     *)
       return 1
       ;;
@@ -120,6 +122,14 @@ source_candidates_for_agent() {
       ;;
     gemini)
       printf '%s\n' "AGENT_INSTALL_GEMINI.md"
+      printf '%s\n' "AGENT_INSTALL.md"
+      ;;
+    openclaw)
+      printf '%s\n' "AGENT_INSTALL_OPENCLAW.md"
+      printf '%s\n' "AGENT_INSTALL.md"
+      ;;
+    hermes)
+      printf '%s\n' "AGENT_INSTALL_HERMES.md"
       printf '%s\n' "AGENT_INSTALL.md"
       ;;
     *)
@@ -622,7 +632,7 @@ list_installed_blocks() {
   local found=0
   local repo source pav prompt
 
-  for agent in codex claude gemini; do
+  for agent in codex claude gemini openclaw hermes; do
     if [[ "$scope" != "all" && "$scope" != "$agent" ]]; then
       continue
     fi
@@ -644,7 +654,7 @@ list_installed_blocks() {
       else
         printf '%s\t%s\n' "$agent" "$line"
       fi
-    done < <(grep -o 'repo=[^ ]* agent=[^ ]* source=[^ ]*\( paversion=[^ ]*\)\?' "$file" | sort -u)
+    done < <(grep -o 'repo=[^ ]* agent=[^ ]* source=[^ ]*\( paversion=[^ ]*\)\?' "$file" | grep -F " agent=$agent " | sort -u)
   done
 
   if [[ "$found" -eq 0 ]]; then
@@ -671,13 +681,13 @@ remove_repo_from_agent_file() {
 repos_from_files() {
   local scope="$1"
   local file
-  for agent in codex claude gemini; do
+  for agent in codex claude gemini openclaw hermes; do
     if [[ "$scope" != "all" && "$scope" != "$agent" ]]; then
       continue
     fi
     file="$(target_file_for_agent "$agent")"
     [[ -f "$file" ]] || continue
-    grep -o 'repo=[^ ]*' "$file" | sed 's/repo=//' || true
+    grep -o 'repo=[^ ]* agent=[^ ]* source=[^ ]*\( paversion=[^ ]*\)\?' "$file" | grep -F " agent=$agent " | grep -o 'repo=[^ ]*' | sed 's/repo=//' || true
   done | sort -u
 }
 
@@ -688,7 +698,7 @@ run_install() {
   local installed=0
   local failed=0
 
-  for agent in codex claude gemini; do
+  for agent in codex claude gemini openclaw hermes; do
     if [[ "$scope" != "all" && "$scope" != "$agent" ]]; then
       continue
     fi
@@ -761,7 +771,7 @@ run_runtime_notes() {
   local quiet="$3"
   local agent
 
-  for agent in codex claude gemini; do
+  for agent in codex claude gemini openclaw hermes; do
     if [[ "$scope" != "all" && "$scope" != "$agent" ]]; then
       continue
     fi
@@ -835,10 +845,10 @@ while (($# > 0)); do
 done
 
 case "$SCOPE" in
-  codex|claude|gemini|all) ;;
+  codex|claude|gemini|openclaw|hermes|all) ;;
   *)
-    say "--agent は codex/claude/gemini/all のいずれかを指定してください。" \
-        "--agent must be one of: codex/claude/gemini/all." >&2
+    say "--agent は codex/claude/gemini/openclaw/hermes/all のいずれかを指定してください。" \
+        "--agent must be one of: codex/claude/gemini/openclaw/hermes/all." >&2
     exit 2
     ;;
 esac
@@ -875,7 +885,7 @@ case "$SUBCMD" in
           "Invalid source spec: $TARGET_SPEC" >&2
       exit 2
     fi
-    for agent in codex claude gemini; do
+    for agent in codex claude gemini openclaw hermes; do
       if [[ "$SCOPE" != "all" && "$SCOPE" != "$agent" ]]; then
         continue
       fi

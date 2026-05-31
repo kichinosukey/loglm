@@ -25,18 +25,23 @@ Place one or more files at repository root:
 - MAY provide `AGENT_INSTALL_CODEX.md` for codex-specific behavior.
 - MAY provide `AGENT_INSTALL_CLAUDE.md` for claude-specific behavior.
 - MAY provide `AGENT_INSTALL_GEMINI.md` for gemini-specific behavior.
+- MAY provide `AGENT_INSTALL_OPENCLAW.md` for OpenClaw-specific behavior.
+- MAY provide `AGENT_INSTALL_HERMES.md` for Hermes Agent-specific behavior.
 
 Resolution order:
 
 - codex: `AGENT_INSTALL_CODEX.md` -> `AGENT_INSTALL.md`
 - claude: `AGENT_INSTALL_CLAUDE.md` -> `AGENT_INSTALL.md`
 - gemini: `AGENT_INSTALL_GEMINI.md` -> `AGENT_INSTALL.md`
+- openclaw: `AGENT_INSTALL_OPENCLAW.md` -> `AGENT_INSTALL.md`
+- hermes: `AGENT_INSTALL_HERMES.md` -> `AGENT_INSTALL.md`
 - `loglm` reads only the first existing file in this order for each agent (no merge).
 
 Install output model:
 
 - `loglm agent install <owner/repo>` stores fetched content into `<REPO-NAME-UPPER>.md` in the current directory.
 - `AGENTS.md` / `CLAUDE.md` / `GEMINI.md` receive managed reference blocks that point to `<REPO-NAME-UPPER>.md`.
+  OpenClaw and Hermes Agent currently use `AGENTS.md` as their experimental target.
 - Prompt-agent authors SHOULD design content assuming it will be consumed from that shared local file.
 
 Prompt-agent version metadata (recommended):
@@ -88,10 +93,11 @@ Requirements:
 
 ## 6. Multi-Agent Sync Rules
 
-Define when `CLAUDE.md` and `GEMINI.md` should mirror `AGENTS.md`.
+Define when `CLAUDE.md`, `GEMINI.md`, and experimental `AGENTS.md` consumers should mirror `AGENTS.md`.
 
 - SHOULD keep a single shared core policy in `AGENT_INSTALL.md`.
 - MAY maintain agent-specific files when tool usage, interaction style, or platform notes differ.
+  This includes `AGENT_INSTALL_OPENCLAW.md` and `AGENT_INSTALL_HERMES.md` when those TUIs need different instructions.
 - MUST keep `## Non-Negotiable Rules` semantically equivalent across variants.
 - MUST document intentional differences in `README.md` (short diff summary is enough).
 
@@ -201,7 +207,7 @@ Before publishing, verify:
 
 - [ ] `## Non-Negotiable Rules` exists and is first section.
 - [ ] `AGENT_INSTALL.md` is present (unless intentionally agent-specific only).
-- [ ] Agent-specific files use `AGENT_INSTALL_CODEX.md` / `AGENT_INSTALL_CLAUDE.md` / `AGENT_INSTALL_GEMINI.md` naming.
+- [ ] Agent-specific files use `AGENT_INSTALL_CODEX.md` / `AGENT_INSTALL_CLAUDE.md` / `AGENT_INSTALL_GEMINI.md` / `AGENT_INSTALL_OPENCLAW.md` / `AGENT_INSTALL_HERMES.md` naming.
 - [ ] No unresolved placeholders remain.
 - [ ] No `<!-- loglm:begin` or `<!-- loglm:end` markers are present.
 - [ ] No unnecessary filename self-references exist.

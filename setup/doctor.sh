@@ -29,3 +29,8 @@ if [[ "$AGENT" == "claude" ]]; then
   say "注意: Claude Code は環境によってネイティブインストール推奨の場合があります。" \
       "Note: Claude Code may recommend native installation on some environments."
 fi
+
+if [[ "$AGENT" == "openclaw" || "$AGENT" == "hermes" ]]; then
+  say "注意: $AGENT の loglm サポートは experimental です。" \
+      "Note: loglm support for $AGENT is experimental."
+fi

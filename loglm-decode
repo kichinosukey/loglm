@@ -93,6 +93,10 @@ decode_raw_to_file() {
       profile="claude"
     elif [[ "$base" == *gemini* ]]; then
       profile="gemini"
+    elif [[ "$base" == *openclaw* ]]; then
+      profile="openclaw"
+    elif [[ "$base" == *hermes* ]]; then
+      profile="hermes"
     elif [[ "$base" == *codex* ]]; then
       profile="codex"
     else
@@ -127,6 +131,8 @@ my $last_csi_param = q{};
 my $profile = $ENV{LOGLM_DECODE_PROFILE} // q{};
 my $is_claude = ($profile eq "claude") ? 1 : 0;
 my $is_gemini = ($profile eq "gemini") ? 1 : 0;
+my $is_openclaw = ($profile eq "openclaw") ? 1 : 0;
+my $is_hermes = ($profile eq "hermes") ? 1 : 0;
 
 while (read(STDIN, $c, 1)) {
   my $b = ord($c);
@@ -469,6 +475,68 @@ if ($is_claude) {
   }
 
   @merged = @normalized;
+} elsif ($is_openclaw || $is_hermes) {
+  my @normalized = ();
+  my $pending_prompt;
+  my $last_emitted_prompt;
+
+  for my $raw (@lines) {
+    my $line = $raw;
+
+    next if $line =~ /^\s*[\p{Block=Box_Drawing}]+\s*$/u;
+    if ($line =~ /^\s*\p{Block=Box_Drawing}(.*)\p{Block=Box_Drawing}\s*$/u) {
+      $line = $1;
+    }
+    $line =~ s/^\s+//;
+    $line =~ s/\s+$//;
+
+    next if $line eq q{};
+    next if $line =~ /^\? for shortcuts$/i;
+    next if $line =~ /^esc to interrupt/i;
+    next if $line =~ /^Try ".*"$/;
+    next if $line =~ /^OpenClaw(?: CLI)? v?[0-9.]+/i;
+    next if $line =~ /^Hermes(?: Agent)? v?[0-9.]+/i;
+    next if $line =~ /^starting agent/i;
+    next if $line =~ /^ready\s*$/i;
+    next if $line =~ /^(?:thinking|running|forging session|resuming)(?:…|\.\.\.)?$/i;
+    next if $line =~ /^\s*(?:[·✢✳✶✻✽⏺☤]+|[⠁-⣿]+)\s*$/u;
+    next if $line =~ /^\s*(?:[·✢✳✶✻✽⏺☤⠁-⣿]+\s*)?(?:thinking|running|working|loading|starting|resuming)(?:…|\.\.\.)?(?:\s+\([^)]+\))?\s*$/iu;
+    next if $line =~ /^\s*(?:[\x{2580}-\x{259F}\x{2800}-\x{28FF}]+\s*)+$/u;
+
+    if ($line =~ /^(?:[❯>›]\s*)(.*)$/) {
+      my $p = $1;
+      $p =~ s/^\s+//;
+      $p =~ s/\s+$//;
+      next if $p eq q{};
+      if (!defined $pending_prompt || $p =~ /^\Q$pending_prompt\E/ || $pending_prompt =~ /^\Q$p\E/) {
+        $pending_prompt = $p;
+        next;
+      }
+      if (!defined $last_emitted_prompt || $last_emitted_prompt ne $pending_prompt) {
+        push @normalized, "> $pending_prompt";
+        $last_emitted_prompt = $pending_prompt;
+      }
+      $pending_prompt = $p;
+      next;
+    }
+
+    if (defined $pending_prompt) {
+      if (!defined $last_emitted_prompt || $last_emitted_prompt ne $pending_prompt) {
+        push @normalized, "> $pending_prompt";
+        $last_emitted_prompt = $pending_prompt;
+      }
+      undef $pending_prompt;
+    }
+
+    next if defined $last_emitted_prompt && $line eq $last_emitted_prompt;
+    push @normalized, $line;
+  }
+
+  if (defined $pending_prompt && (!defined $last_emitted_prompt || $last_emitted_prompt ne $pending_prompt)) {
+    push @normalized, "> $pending_prompt";
+  }
+
+  @merged = @normalized;
 } else {
   @merged = @lines;
 }
@@ -573,7 +641,7 @@ for my $line (@merged) {
       $cmp = "(status)";
       $line_out = "(status)";
     }
-  } elsif ($is_gemini) {
+  } elsif ($is_gemini || $is_openclaw || $is_hermes) {
     $cmp =~ s/^\s+//;
     $cmp =~ s/\s+$//;
     # Startup banner art is mostly decorative and very noisy.
@@ -678,6 +746,10 @@ trim_overlap_with_previous() {
     profile="claude"
   elif [[ "$base" == *gemini* ]]; then
     profile="gemini"
+  elif [[ "$base" == *openclaw* ]]; then
+    profile="openclaw"
+  elif [[ "$base" == *hermes* ]]; then
+    profile="hermes"
   elif [[ "$base" == *codex* ]]; then
     profile="codex"
   fi
