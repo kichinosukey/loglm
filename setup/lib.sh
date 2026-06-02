@@ -236,7 +236,7 @@ activate_nvm_default_if_available() {
 }
 
 get_supported_agents() {
-  printf '%s\n' "codex claude gemini antigravity cursor"
+  printf '%s\n' "codex claude gemini antigravity cursor openclaw hermes"
 }
 
 get_agent_target_file() {
@@ -246,6 +246,8 @@ get_agent_target_file() {
     gemini) printf '%s\n' "GEMINI.md" ;;
     antigravity) printf '%s\n' "ANTIGRAVITY.md" ;;
     cursor) printf '%s\n' "CURSOR.md" ;;
+    openclaw) printf '%s\n' "AGENTS.md" ;;
+    hermes) printf '%s\n' "AGENTS.md" ;;
     *) return 1 ;;
   esac
 }
@@ -254,6 +256,8 @@ get_agent_command() {
   case "$1" in
     antigravity) printf '%s\n' "agy" ;;
     cursor) printf '%s\n' "cursor-agent" ;;
+    openclaw) printf '%s\n' "openclaw" ;;
+    hermes) printf '%s\n' "hermes" ;;
     *) printf '%s\n' "$1" ;;
   esac
 }

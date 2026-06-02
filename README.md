@@ -1,5 +1,5 @@
 # loglm
-Logged launcher for AI coding agents: Claude Code, Codex, and Gemini.
+Logged launcher for AI coding agents: Claude Code, Codex, Gemini, OpenClaw, and Hermes Agent.
 
 ## Install
 
@@ -68,6 +68,8 @@ loglm
   - `AGENTS.md` for Codex
   - `CLAUDE.md` for Claude Code
   - `GEMINI.md` for Gemini
+  - `AGENTS.md` for OpenClaw (experimental)
+  - `AGENTS.md` for Hermes Agent (experimental)
 
 Both are scoped to the directory where you run `loglm`.
 By default, each launch writes to a unique log file:
@@ -78,7 +80,7 @@ The managed instruction notes tell the coding agent that it may be running throu
 where logs are stored, and how to use `loglm-decode` and `loglm-timeline` when asked to
 inspect previous work.
 
-If the selected agent command is missing (`codex`, `claude`, or `gemini`),
+If the selected agent command is missing (`codex`, `claude`, `gemini`, `openclaw`, or `hermes`),
 `loglm` prompts and runs an installer from `~/.local/share/loglm/setup`.
 Before agent install, `doctor.sh` runs base checks (such as `script` command availability).
 On macOS, setup prefers Homebrew for agent installation when a brew package is available;
@@ -88,6 +90,31 @@ When npm fallback is used and npm is missing, setup can install Node.js / npm in
 On Linux/WSL/Raspberry Pi/Chrome OS, Node.js is installed via `nvm` (latest LTS) by setup.
 When npm fallback is used, setup configures npm global installs to user space (`~/.local`) to avoid permission errors.
 If `~/.npmrc` has incompatible `prefix`/`globalconfig` entries, setup adjusts them automatically for nvm.
+
+Experimental agents:
+
+- OpenClaw is launched as `openclaw tui --local`.
+  - If missing, setup runs the official OpenClaw installer script.
+  - OpenClaw requires Node.js 22+; the official installer handles Node detection/installation.
+- Hermes Agent is launched as `hermes`.
+  - If missing, setup runs the official Hermes Agent installer script.
+  - The official installer handles dependencies such as uv, Python, Node.js, ripgrep, and ffmpeg.
+- OpenClaw and Hermes Agent support is experimental in loglm v0.2.x.
+- Experimental support is intended for macOS native and Ubuntu-family environments
+  (Ubuntu, Ubuntu on Lima, and Ubuntu on WSL2), but actual installation depends on
+  the upstream official installers.
+- In `loglm`, `hermes` is the command/agent id for Hermes Agent. It refers to the
+  Hermes Agent CLI/TUI project, not to the Hermes model family.
+- For OpenClaw prompt-agent installation, `loglm agent install ... --agent openclaw`
+  also creates a temporary `SKILL.md` wrapper and runs
+  `openclaw skills install <skill-dir> --as <repo-name>` when the `openclaw` command
+  is available. `AGENTS.md` is still updated with loglm runtime notes and a managed
+  reference block.
+- For Hermes Agent prompt-agent installation, `loglm agent install ... --agent hermes`
+  writes a skill wrapper to `~/.hermes/skills/research/<repo-name>/SKILL.md`.
+  `AGENTS.md` is still updated with loglm runtime notes and a managed reference block.
+  In Hermes, load the skill explicitly if needed with `/skill <repo-name>` or start
+  Hermes with `hermes -s <repo-name>`.
 
 Claude Code (all supported platforms):
 
@@ -111,12 +138,17 @@ LOGLM_LANG=both loglm
 - `--resume`: Open the agent's built-in session picker.
 - For Gemini, default launch uses `gemini --resume`; `--new` starts a new session.
   If context is not restored as expected, run `/resume` (or `/chat resume`) inside Gemini after launch.
-- `--agent`: Re-select the AI coding agent (`codex` / `claude` / `gemini`).
+- For OpenClaw, default launch uses `openclaw tui --local`; `--new` starts a distinct `loglm-...` session key.
+- For Hermes Agent, default launch uses `hermes --continue` when a previous
+  Hermes CLI session is found; otherwise it launches `hermes` normally.
+  `--new` launches `hermes` without `--continue`.
+- `--agent`: Re-select the AI coding agent (`codex` / `claude` / `gemini` / `openclaw` / `hermes`).
 - `--daily-log`: Use one log file per day (legacy behavior).
 - `-X`, `--dangerous`: Start the agent in dangerous/no-approval mode.
   - `codex`: `--dangerously-bypass-approvals-and-sandbox`
   - `claude`: `--dangerously-skip-permissions`
   - `gemini`: `--yolo`
+  - `openclaw` / `hermes`: no dangerous-mode flag is passed by loglm yet
 - `-h`, `--help`: Show help.
 - `-v`, `--version`: Show loglm version.
 
@@ -140,7 +172,7 @@ Supported repository spec:
 
 Supported options:
 
-- `--agent codex|claude|gemini|all` (default: current `./.loglm_agent`)
+- `--agent codex|claude|gemini|openclaw|hermes|all` (default: current `./.loglm_agent`)
 - `--verbose` (for `list`): show prompt file and prompt-agent version metadata
 
 File mapping:
@@ -148,6 +180,8 @@ File mapping:
 - codex source -> `AGENT_INSTALL_CODEX.md` -> `AGENT_INSTALL.md`
 - claude source -> `AGENT_INSTALL_CLAUDE.md` -> `AGENT_INSTALL.md`
 - gemini source -> `AGENT_INSTALL_GEMINI.md` -> `AGENT_INSTALL.md`
+- openclaw source -> `AGENT_INSTALL_OPENCLAW.md` -> `AGENT_INSTALL.md` (experimental)
+- hermes source -> `AGENT_INSTALL_HERMES.md` -> `AGENT_INSTALL.md` (experimental)
 - `loglm` uses only the first existing file in that order (no merge).
 - For local source paths, the same file mapping/rules apply.
 
@@ -171,7 +205,7 @@ Behavior:
 - Each installed prompt-agent block includes a small heading (`### Prompt Agent: <owner/repo>`)
   for readability.
 - Managed reference blocks include strong instructions (`MUST read`, `MUST follow`) for consistency
-  across codex / claude / gemini.
+  across codex / claude / gemini / openclaw / hermes.
 - Multiple repositories can be installed into the same file.
 - A platform block is maintained automatically (macOS / WSL2 / Ubuntu on Lima / etc.).
 - A common execution-policy block is maintained automatically (escalation-first on permission/sandbox failures).
@@ -247,7 +281,17 @@ Behavior:
 - if the input is already `*.redacted.txt`, it is reviewed in place
 - candidates show their first matching line number and line text for review
 - the candidate list is grouped by blank lines
+- within a group, lines beginning with `-` are exclusion strings
 - each group is replaced with a numbered token such as `***1*`, `***2*`
+
+Example exclusion:
+
+```text
+いし
+-願いし
+```
+
+This redacts the nickname `いし` while preserving phrases such as `お願いします`.
 
 For bulk redaction without interactive prompts:
 
@@ -297,6 +341,8 @@ bash scripts/regression.sh --e2e --repo ks91/gamer-pat --agent codex
 - `~/.local/share/loglm/setup/agent-codex.sh`
 - `~/.local/share/loglm/setup/agent-claude.sh`
 - `~/.local/share/loglm/setup/agent-gemini.sh`
+- `~/.local/share/loglm/setup/agent-openclaw.sh`
+- `~/.local/share/loglm/setup/agent-hermes.sh`
 
 Environment variables:
 

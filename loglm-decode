@@ -23,9 +23,13 @@ Behavior:
     Example: logs/codex-log-20260217.txt -> logs/codex-log-20260217.decoded.txt
   - By default, overlapping leading context shared with the previous log
     in the same series is trimmed from the current decoded output.
+    For Claude logs, a matching "claude --resume <UUID>" session ID is
+    preferred over simple filename order when that ID is available.
   - With --review-pii, the first positional argument is a grouped
     pii-candidates.txt file and the remaining positional arguments are logs.
   - Empty lines in pii-candidates.txt separate person/entity groups.
+  - In a group, lines beginning with "-" are exclusion strings for that group.
+    Example: "いし" with "-願いし" keeps "お願いします" unchanged.
   - Each group is replaced with a numbered token: ***1*, ***2*, ...
   - --replace-all applies the numbered replacement to every matched group
     without prompts.
@@ -89,6 +93,10 @@ decode_raw_to_file() {
       profile="claude"
     elif [[ "$base" == *gemini* ]]; then
       profile="gemini"
+    elif [[ "$base" == *openclaw* ]]; then
+      profile="openclaw"
+    elif [[ "$base" == *hermes* ]]; then
+      profile="hermes"
     elif [[ "$base" == *codex* ]]; then
       profile="codex"
     else
@@ -124,6 +132,8 @@ my $profile = $ENV{LOGLM_DECODE_PROFILE} // q{};
 my $is_claude = ($profile eq "claude") ? 1 : 0;
 my $is_gemini = ($profile eq "gemini") ? 1 : 0;
 my $is_codex = ($profile eq "codex") ? 1 : 0;
+my $is_openclaw = ($profile eq "openclaw") ? 1 : 0;
+my $is_hermes = ($profile eq "hermes") ? 1 : 0;
 
 while (read(STDIN, $c, 1)) {
   my $b = ord($c);
@@ -494,12 +504,137 @@ if ($is_claude) {
   }
 
   @merged = @normalized;
+} elsif ($is_openclaw || $is_hermes) {
+  my @normalized = ();
+  my $pending_prompt;
+  my $last_emitted_prompt;
+  my $in_slash_menu = 0;
+  my $in_hermes_banner = 0;
+
+  for my $raw (@lines) {
+    my $line = $raw;
+
+    next if $line =~ /^\s*[\p{Block=Box_Drawing}]+\s*$/u;
+    if ($line =~ /^\s*\p{Block=Box_Drawing}(.*)\p{Block=Box_Drawing}\s*$/u) {
+      $line = $1;
+    }
+    $line =~ s/^\s+//;
+    $line =~ s/\s+$//;
+
+    next if $line eq q{};
+
+    if ($is_hermes && $line =~ /^Available Tools$/) {
+      $in_hermes_banner = 1;
+      next;
+    }
+    if ($in_hermes_banner) {
+      if ($line =~ /^(?:Welcome to Hermes Agent!|[0-9]+ tools · [0-9]+ skills · \/help for commands)/) {
+        $in_hermes_banner = 0;
+      }
+      next;
+    }
+
+    if ($in_slash_menu) {
+      if (
+        $line =~ /^→\s+/ ||
+        $line =~ /^[a-z][a-z0-9-]*(?:\s{2,}|\t+).+/i ||
+        $line =~ /^exit\s+Exit the CLI/i ||
+        $line =~ /^[a-z][a-z0-9-]*\s*$/i
+      ) {
+        next;
+      }
+      $in_slash_menu = 0;
+    }
+
+    next if $line =~ /^\? for shortcuts$/i;
+    next if $line =~ /^esc to interrupt/i;
+    next if $line =~ /^Try ".*"$/;
+    next if $line =~ /^Script started on /;
+    next if $line =~ /^◇$/;
+    next if $line =~ /^[-─]+ Hermes Agent\b/;
+    next if $line =~ /^OpenClaw(?: CLI)? v?[0-9.]+/i;
+    next if $line =~ /^Hermes(?: Agent)? v?[0-9.]+/i;
+    next if $line =~ /^Welcome to Hermes Agent!/i;
+    next if $line =~ /^✦ Tip:/;
+    next if $line =~ /^appear without manual intervention\./;
+    next if $line =~ /^openclaw tui\b/i;
+    next if $line =~ /^local ready \|/i;
+    next if $line =~ /^agent main \|/i;
+    next if $line =~ /^session agent:/i;
+    next if $line =~ /^loglm-\d{8}-\d{6}-pid\d+$/;
+    next if $line =~ /^\?\/[0-9.]+k$/i;
+    next if $line =~ /^tokens [0-9.]+k\/[0-9.]+k \(\d+%\)$/i;
+    next if $line =~ /^starting agent/i;
+    next if $line =~ /^Initializing agent/i;
+    next if $line =~ /^ready\s*$/i;
+    next if $line =~ /^(?:thinking|running|working|loading|starting|forging session|resuming)(?:…|\.\.\.)?$/i;
+    next if $line =~ /^(?:\S+\s+)?(?:pondering|moseying|bamboozling|kerfuffling|brainstorming|reflecting|cogitating|twiddling thumbs)(?:…|\.\.\.)?(?:\s+•\s+\d+s.*)?$/i;
+    next if length($line) <= 100 && $line =~ /\b(?:analyzing|reflecting|formulating|computing|reasoning|ruminating|mulling|deliberating|pondering|cogitating)\.\.\.$/i;
+    next if $line =~ /^\s*(?:[·✢✳✶✻✽⏺☤]+|[⠁-⣿]+)\s*$/u;
+    next if $line =~ /^\s*(?:[·✢✳✶✻✽⏺☤⠁-⣿◉ಠ_()⌐■]+\s*)?(?:thinking|running|working|loading|starting|resuming|brainstorming|reflecting|cogitating)(?:…|\.\.\.)?(?:\s+\([^)]+\))?\s*$/iu;
+    next if $line =~ /^\s*(?:[\x{2580}-\x{259F}\x{2800}-\x{28FF}]+\s*)+$/u;
+    next if $line =~ /^⚕\s+[^│]+│.*(?:ctx --|[0-9.]+K?\/[0-9.]+K|[0-9]+\/[0-9]+K).*$/u;
+    next if $line =~ /^.*⚕\s+[^│]+│.*(?:ctx --|[0-9.]+K?\/[0-9.]+K|[0-9]+\/[0-9]+K).*$/u;
+    next if $line =~ /^⚕\s+❯\s+msg=interrupt\b/u;
+    next if $line =~ /^[0-9.]+K?\/\s*[0-9.]+\s*K?\s*│.*$/u;
+    next if $line =~ /^─\s*⚕\s+Hermes\s*─/u;
+    next if $line =~ /^⚙️\s+\/exit$/u;
+    next if $line =~ /^Exit the CLI \(use --delete to also /;
+    next if $line =~ /^⚡ Hand-drawn /;
+    next if $line =~ /^[0-9]+$/ && $is_hermes;
+    next if $line =~ /^[0-9]+s$/ && $is_hermes;
+    next if $line =~ /^[[:alpha:]]$/ && $is_hermes;
+    next if $line =~ /^[[:alpha:]]{2,4}$/ && $is_hermes;
+    next if $line =~ /^[[:alpha:]]{2,4}\s+\(\s*\d+(?:\.\d+)?s\)$/ && $is_hermes;
+    next if $line =~ /^[[:alpha:]]\s+.*(?:\|\s*head|true)$/ && $is_hermes;
+    next if $line =~ /^[[:alpha:]](?:\s+[[:alnum:][:punct:]])+.*\(\s*\d+(?:\.\d+)?s\)$/ && $is_hermes;
+    next if $line =~ /^.{1,40}\s+[0-9]+$/ && $is_hermes && $line !~ /[。.!?]$/;
+
+    if ($line =~ m{^/[A-Za-z]*$}) {
+      $in_slash_menu = 1;
+      next;
+    }
+
+    if ($line =~ /^(?:[❯>›]\s*)(.*)$/) {
+      my $p = $1;
+      $p =~ s/^\s+//;
+      $p =~ s/\s+$//;
+      next if $p eq q{};
+      if (!defined $pending_prompt || $p =~ /^\Q$pending_prompt\E/ || $pending_prompt =~ /^\Q$p\E/) {
+        $pending_prompt = $p;
+        next;
+      }
+      if (!defined $last_emitted_prompt || $last_emitted_prompt ne $pending_prompt) {
+        push @normalized, "> $pending_prompt";
+        $last_emitted_prompt = $pending_prompt;
+      }
+      $pending_prompt = $p;
+      next;
+    }
+
+    if (defined $pending_prompt) {
+      if (!defined $last_emitted_prompt || $last_emitted_prompt ne $pending_prompt) {
+        push @normalized, "> $pending_prompt";
+        $last_emitted_prompt = $pending_prompt;
+      }
+      undef $pending_prompt;
+    }
+
+    next if defined $last_emitted_prompt && $line eq $last_emitted_prompt;
+    push @normalized, $line;
+  }
+
+  if (defined $pending_prompt && (!defined $last_emitted_prompt || $last_emitted_prompt ne $pending_prompt)) {
+    push @normalized, "> $pending_prompt";
+  }
+
+  @merged = @normalized;
 } else {
   @merged = @lines;
 }
 
-if ($is_claude) {
-  # If a later complete prompt redraw exists, drop the partial staircase echo
+if ($is_claude || $is_hermes) {
+  # If a later complete prompt redraw exists, drop the partial echo
   # that is a suffix of it (e.g. "oglm..." before "❯ loglm ...").
   my @filtered = ();
   for (my $i = 0; $i < @merged; $i++) {
@@ -508,6 +643,7 @@ if ($is_claude) {
     $curr_cmp =~ s/^\s+//;
     $curr_cmp =~ s/\s+$//;
     $curr_cmp =~ s/^[❯>›]\s*//;
+    $curr_cmp =~ s/^●\s*//;
     $curr_cmp =~ s/\s+//g;
 
     my $drop = 0;
@@ -516,11 +652,12 @@ if ($is_claude) {
       $limit = $#merged if $limit > $#merged;
       for my $j ($i + 1 .. $limit) {
         my $next = $merged[$j];
-        next unless $next =~ /^\s*[❯>›]\s*\S/;
+        next unless $next =~ /^\s*(?:[❯>›]|●)\s*\S/;
         my $next_cmp = $next;
         $next_cmp =~ s/^\s+//;
         $next_cmp =~ s/\s+$//;
         $next_cmp =~ s/^[❯>›]\s*//;
+        $next_cmp =~ s/^●\s*//;
         $next_cmp =~ s/\s+//g;
         if (length($next_cmp) > length($curr_cmp) && substr($next_cmp, -length($curr_cmp)) eq $curr_cmp) {
           $drop = 1;
@@ -598,7 +735,7 @@ for my $line (@merged) {
       $cmp = "(status)";
       $line_out = "(status)";
     }
-  } elsif ($is_gemini) {
+  } elsif ($is_gemini || $is_openclaw || $is_hermes) {
     $cmp =~ s/^\s+//;
     $cmp =~ s/\s+$//;
     # Startup banner art is mostly decorative and very noisy.
@@ -633,9 +770,22 @@ print STDOUT encode("UTF-8", $out);
   echo "decoded: $in_file -> $out_file"
 }
 
+extract_claude_resume_id() {
+  local in_file="$1"
+  perl -ne '
+    while (/claude\s+--resume\s+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/ig) {
+      $id = lc $1;
+    }
+    END {
+      print "$id\n" if defined $id;
+    }
+  ' "$in_file"
+}
+
 find_previous_log_in_series() {
   local in_file="$1"
   local dir base prefix prev candidate candidate_base
+  local current_session candidate_session session_prev
   dir="$(dirname "$in_file")"
   base="$(basename "$in_file")"
 
@@ -643,6 +793,10 @@ find_previous_log_in_series() {
     return 1
   fi
   prefix="${BASH_REMATCH[1]}"
+  current_session=""
+  if [[ "$base" == loglm-claude-log-* ]]; then
+    current_session="$(extract_claude_resume_id "$in_file")"
+  fi
 
   while IFS= read -r candidate; do
     candidate_base="$(basename "$candidate")"
@@ -650,8 +804,19 @@ find_previous_log_in_series() {
     [[ "$candidate_base" == "$base" ]] && continue
     if [[ "$candidate_base" < "$base" ]]; then
       prev="$candidate"
+      if [[ -n "$current_session" ]]; then
+        candidate_session="$(extract_claude_resume_id "$candidate")"
+        if [[ "$candidate_session" == "$current_session" ]]; then
+          session_prev="$candidate"
+        fi
+      fi
     fi
   done < <(find "$dir" -maxdepth 1 -type f -name "${prefix}*.txt" | LC_ALL=C sort)
+
+  if [[ -n "${session_prev:-}" ]]; then
+    printf '%s\n' "$session_prev"
+    return 0
+  fi
 
   [[ -n "${prev:-}" ]] || return 1
   printf '%s\n' "$prev"
@@ -675,6 +840,10 @@ trim_overlap_with_previous() {
     profile="claude"
   elif [[ "$base" == *gemini* ]]; then
     profile="gemini"
+  elif [[ "$base" == *openclaw* ]]; then
+    profile="openclaw"
+  elif [[ "$base" == *hermes* ]]; then
+    profile="hermes"
   elif [[ "$base" == *codex* ]]; then
     profile="codex"
   fi
@@ -690,6 +859,9 @@ trim_overlap_with_previous() {
   perl -0pi -e '
 use strict;
 use warnings;
+use utf8;
+use open qw(:std :encoding(UTF-8));
+use Encode ();
 
 my $prev_path = $ENV{LOGLM_DECODE_PREV_PATH} // q{};
 my $profile = $ENV{LOGLM_DECODE_OVERLAP_PROFILE} // q{};
@@ -700,7 +872,9 @@ open my $pfh, "<:raw", $prev_path or die "open prev: $!";
 local $/;
 my $prev = <$pfh>;
 close $pfh;
+$prev = Encode::decode("UTF-8", $prev, 0);
 my $curr = $_;
+$curr = Encode::decode("UTF-8", $curr, 0) unless utf8::is_utf8($curr);
 
 my @prev = split /\n/, $prev, -1;
 my @curr = split /\n/, $curr, -1;
@@ -928,6 +1102,106 @@ if ($profile eq "codex") {
   }
 }
 
+if ($profile eq "claude") {
+  sub claude_significant_lines {
+    my ($lines_ref, $start_idx) = @_;
+    my @items = ();
+    for my $i ($start_idx .. $#{$lines_ref}) {
+      my $line = $lines_ref->[$i] // q{};
+      my $s = normalize_overlap_line($line);
+      next if $s eq q{};
+      next if $s =~ /^===== loglm start /;
+      next if $s =~ /^[─-]{10,}$/;
+      next if $s =~ /^\(?status\)?$/i;
+      next if $s =~ /^\? for shortcuts/;
+      next if $s =~ /^esc to interrupt/i;
+      next if $s =~ /^Claude Code v[0-9.]+/;
+      next if $s =~ /Claude Code v[0-9.]+/;
+      next if $s =~ /^(?:Sonnet|Opus|Haiku) /;
+      next if $s =~ m{^~/};
+      next if $s =~ /^[▗▘▝▖\s]+$/;
+      next if length($s) < 2;
+
+      my $is_prompt = ($s =~ /^[❯>›]\s*\S/) ? 1 : 0;
+      $s =~ s/^[❯>›]\s*/❯ /;
+      $s =~ s/^\s*⏺\s*/⏺ /;
+      push @items, [$i, $s, $is_prompt];
+    }
+    return @items;
+  }
+
+  my @prev_sig = claude_significant_lines(\@prev, 0);
+  my @curr_sig = claude_significant_lines(\@curr, $body_start);
+  shift @curr_sig while @curr_sig && !$curr_sig[0]->[2] && $curr_sig[0]->[1] !~ /^⏺ /;
+
+  if (@prev_sig && @curr_sig) {
+    my $sig_best_matched = 0;
+    my $sig_best_chars = 0;
+    my $sig_best_end_line = -1;
+    my $sig_min_chars = int($min_chars / 3);
+    $sig_min_chars = 120 if $sig_min_chars < 120;
+
+    for my $start_prev (0 .. $#prev_sig) {
+      next unless $prev_sig[$start_prev]->[1] eq $curr_sig[0]->[1];
+
+      my $pi = $start_prev;
+      my $matched = 0;
+      my $chars = 0;
+      my $last_ci = -1;
+      my $miss_streak = 0;
+
+      for my $ci (0 .. $#curr_sig) {
+        my $needle = $curr_sig[$ci]->[1];
+        my $found = -1;
+        my $probe_limit = $pi + 12;
+        $probe_limit = $#prev_sig if $probe_limit > $#prev_sig;
+
+        for my $probe ($pi .. $probe_limit) {
+          if ($prev_sig[$probe]->[1] eq $needle) {
+            $found = $probe;
+            last;
+          }
+        }
+
+        if ($found >= 0) {
+          $matched++;
+          $chars += length($needle) + 1;
+          $last_ci = $ci;
+          $pi = $found + 1;
+          $miss_streak = 0;
+          next;
+        }
+
+        last if $curr_sig[$ci]->[2] && $matched >= 8;
+        $miss_streak++;
+        last if $miss_streak >= 24;
+      }
+
+      next if $matched < 8;
+      next if $chars < $sig_min_chars;
+      if ($matched > $sig_best_matched || ($matched == $sig_best_matched && $chars > $sig_best_chars)) {
+        $sig_best_matched = $matched;
+        $sig_best_chars = $chars;
+        $sig_best_end_line = $curr_sig[$last_ci]->[0] if $last_ci >= 0;
+      }
+    }
+
+    if ($sig_best_end_line >= 0) {
+      my $sig_best_lines = $sig_best_end_line - $body_start + 1;
+      if (
+        $best_offset < 0 ||
+        $best_offset > $body_start + 80 ||
+        $sig_best_lines > $best ||
+        $sig_best_chars > $best_chars
+      ) {
+        $best_offset = $body_start;
+        $best = $sig_best_lines;
+        $best_chars = $sig_best_chars;
+      }
+    }
+  }
+}
+
 if ($profile ne "codex" && $best_offset > $body_start + 80) {
   # Overlap trimming is intended for leading context replay after resume.
   # Tail matches (for example "Resume this session with: ...") must not cause
@@ -1021,6 +1295,8 @@ if ($profile eq "codex") {
     $_ .= "\n" if length($_);
   }
 }
+
+$_ = Encode::encode("UTF-8", $_) if utf8::is_utf8($_);
 ' "$out_file"
 
   rm -f "$prev_tmp"
@@ -1134,6 +1410,7 @@ close $fh;
 open my $pfh, "<:raw", $pii_list_file or die "open pii_list_file: $!";
 my @raw_groups;
 my @current;
+my @current_excludes;
 while (my $raw = <$pfh>) {
   my $line = decode("UTF-8", $raw, FB_DEFAULT);
   chomp $line;
@@ -1143,25 +1420,52 @@ while (my $raw = <$pfh>) {
   }
   if ($line =~ /^\s*$/) {
     if (@current) {
-      push @raw_groups, [@current];
+      push @raw_groups, { values => [@current], excludes => [@current_excludes] };
       @current = ();
+      @current_excludes = ();
     }
+    next;
+  }
+  if ($line =~ /^-\s*(.+)$/) {
+    push @current_excludes, $1;
     next;
   }
   push @current, $line;
 }
-push @raw_groups, [@current] if @current;
+push @raw_groups, { values => [@current], excludes => [@current_excludes] } if @current;
 close $pfh;
+
+sub excluded_at {
+  my ($line, $start, $length, $excludes_ref) = @_;
+  my $end = $start + $length;
+  for my $exclude (@{$excludes_ref}) {
+    next if !defined($exclude) || $exclude eq q{};
+    my $pos = -1;
+    while (1) {
+      $pos = index($line, $exclude, $pos + 1);
+      last if $pos < 0;
+      my $exclude_end = $pos + length($exclude);
+      return 1 if $pos <= $start && $end <= $exclude_end;
+    }
+  }
+  return 0;
+}
 
 my %seen_value;
 for my $gidx (0 .. $#raw_groups) {
-  my @unique = grep { !$seen_value{$_}++ } @{ $raw_groups[$gidx] };
+  my @unique = grep { !$seen_value{$_}++ } @{ $raw_groups[$gidx]->{values} };
   @unique = sort { length($b) <=> length($a) || $a cmp $b } @unique;
+  my @excludes = @{ $raw_groups[$gidx]->{excludes} };
+  @excludes = sort { length($b) <=> length($a) || $a cmp $b } @excludes;
   my $token = sprintf("***%d*", $gidx + 1);
   my ($first_line_no, $first_line_text, $hits) = (undef, undef, 0);
   for my $candidate (@unique) {
     for my $i (0 .. $#lines) {
-      if (index($lines[$i], $candidate) >= 0) {
+      my $pos = -1;
+      while (1) {
+        $pos = index($lines[$i], $candidate, $pos + 1);
+        last if $pos < 0;
+        next if excluded_at($lines[$i], $pos, length($candidate), \@excludes);
         $hits++;
         if (!defined $first_line_no) {
           $first_line_no = $i + 1;
@@ -1173,7 +1477,8 @@ for my $gidx (0 .. $#raw_groups) {
   }
   next if !$hits;
   my $joined = join("\x1f", @unique);
-  print join("\t", "pii_group", $hits, $token, ($first_line_no // q{}), ($first_line_text // q{}), $joined), "\n";
+  my $excluded = join("\x1f", @excludes);
+  print join("\t", "pii_group", $hits, $token, ($first_line_no // q{}), ($first_line_text // q{}), $joined, $excluded), "\n";
 }
 ' 
 }
@@ -1182,19 +1487,77 @@ replace_group_in_file() {
   local file="$1"
   local replacement="$2"
   shift 2
-  local values=("$@")
-  local value
-  for value in "${values[@]}"; do
-    replace_literal_in_file "$file" "$value" "$replacement"
-  done
+  local values_joined="$1"
+  local excludes_joined="$2"
+  VALUES_JOINED="$values_joined" EXCLUDES_JOINED="$excludes_joined" REPLACEMENT="$replacement" perl -0pi -e '
+use strict;
+use warnings;
+use utf8;
+use open qw(:std :encoding(UTF-8));
+use Encode ();
+
+my $replacement = $ENV{REPLACEMENT} // q{};
+my $values_joined = $ENV{VALUES_JOINED} // q{};
+my $excludes_joined = $ENV{EXCLUDES_JOINED} // q{};
+$values_joined = Encode::decode("UTF-8", $values_joined, 0) unless utf8::is_utf8($values_joined);
+$excludes_joined = Encode::decode("UTF-8", $excludes_joined, 0) unless utf8::is_utf8($excludes_joined);
+my @values = grep { $_ ne q{} } split(/\x1f/, $values_joined, -1);
+my @excludes = grep { $_ ne q{} } split(/\x1f/, $excludes_joined, -1);
+@values = sort { length($b) <=> length($a) || $a cmp $b } @values;
+@excludes = sort { length($b) <=> length($a) || $a cmp $b } @excludes;
+
+$_ = Encode::decode("UTF-8", $_, 0) unless utf8::is_utf8($_);
+
+sub excluded_at {
+  my ($line, $start, $length) = @_;
+  my $end = $start + $length;
+  for my $exclude (@excludes) {
+    my $pos = -1;
+    while (1) {
+      $pos = index($line, $exclude, $pos + 1);
+      last if $pos < 0;
+      my $exclude_end = $pos + length($exclude);
+      return 1 if $pos <= $start && $end <= $exclude_end;
+    }
+  }
+  return 0;
+}
+
+my @lines = split(/\n/, $_, -1);
+for my $li (0 .. $#lines) {
+  my $line = $lines[$li];
+  my $out = q{};
+  my $pos = 0;
+  while ($pos < length($line)) {
+    my $matched = q{};
+    for my $value (@values) {
+      next unless substr($line, $pos, length($value)) eq $value;
+      next if excluded_at($line, $pos, length($value));
+      $matched = $value;
+      last;
+    }
+    if ($matched ne q{}) {
+      $out .= $replacement;
+      $pos += length($matched);
+    } else {
+      $out .= substr($line, $pos, 1);
+      $pos++;
+    }
+  }
+  $lines[$li] = $out;
+}
+$_ = join("\n", @lines);
+$_ = Encode::encode("UTF-8", $_) if utf8::is_utf8($_);
+' "$file"
 }
 
 review_pii_candidates() {
   local out_file="$1"
   local pii_list_file="$2"
   local replace_all="${3:-0}"
-  local line reason count replacement line_no line_text group_values answer total index
+  local line reason count replacement line_no line_text group_values group_excludes answer total index
   local -a values
+  local -a excludes
   local -a candidates
 
   while IFS= read -r line; do
@@ -1212,8 +1575,9 @@ review_pii_candidates() {
   index=0
   for line in "${candidates[@]}"; do
     index=$((index + 1))
-    IFS=$'\t' read -r reason count replacement line_no line_text group_values <<< "$line"
+    IFS=$'\t' read -r reason count replacement line_no line_text group_values group_excludes <<< "$line"
     IFS=$'\x1f' read -r -a values <<< "$group_values"
+    IFS=$'\x1f' read -r -a excludes <<< "$group_excludes"
     printf '[%d/%d] %s (%s hit%s): %s\n' \
       "$index" "$total" "$reason" "$count" \
       "$([[ "$count" == "1" ]] && printf '' || printf 's')" \
@@ -1222,8 +1586,11 @@ review_pii_candidates() {
       printf '        line %s: %s\n' "$line_no" "$line_text"
     fi
     printf '        aliases: %s\n' "$(IFS=', '; printf '%s' "${values[*]}")"
+    if [[ -n "${group_excludes:-}" ]]; then
+      printf '        excludes: %s\n' "$(IFS=', '; printf '%s' "${excludes[*]}")"
+    fi
     if [[ "$replace_all" -eq 1 ]]; then
-      replace_group_in_file "$out_file" "$replacement" "${values[@]}"
+      replace_group_in_file "$out_file" "$replacement" "$group_values" "${group_excludes:-}"
       continue
     fi
     while true; do
@@ -1231,7 +1598,7 @@ review_pii_candidates() {
       IFS= read -r answer || answer="q"
       case "$answer" in
         y|Y|yes|YES)
-          replace_group_in_file "$out_file" "$replacement" "${values[@]}"
+          replace_group_in_file "$out_file" "$replacement" "$group_values" "${group_excludes:-}"
           break
           ;;
         q|Q|quit|QUIT)
@@ -1330,6 +1697,56 @@ if [[ "$REVIEW_PII" -eq 1 ]]; then
   inputs=("${inputs[@]:1}")
 fi
 
+if [[ "$REVIEW_PII" -eq 1 && -z "$output_path" ]]; then
+  output_keys=()
+  best_inputs=()
+  best_priorities=()
+  first_indexes=()
+  deduped_inputs=()
+
+  for idx in "${!inputs[@]}"; do
+    in_file="${inputs[$idx]}"
+    out_file="$(derive_redacted_output_path "$in_file")"
+    priority=2
+    if is_decoded_input "$in_file"; then
+      priority=3
+    elif is_redacted_input "$in_file"; then
+      priority=1
+    fi
+
+    found_index=-1
+    for key_idx in "${!output_keys[@]}"; do
+      if [[ "${output_keys[$key_idx]}" == "$out_file" ]]; then
+        found_index="$key_idx"
+        break
+      fi
+    done
+
+    if [[ "$found_index" -lt 0 ]]; then
+      output_keys+=("$out_file")
+      best_inputs+=("$in_file")
+      best_priorities+=("$priority")
+      first_indexes+=("$idx")
+      continue
+    fi
+
+    if (( priority > best_priorities[$found_index] )); then
+      best_inputs[$found_index]="$in_file"
+      best_priorities[$found_index]="$priority"
+    fi
+  done
+
+  while IFS= read -r key_idx; do
+    deduped_inputs+=("${best_inputs[$key_idx]}")
+  done < <(
+    for key_idx in "${!output_keys[@]}"; do
+      printf '%s\t%s\n' "${first_indexes[$key_idx]}" "$key_idx"
+    done | LC_ALL=C sort -n | cut -f2-
+  )
+
+  inputs=("${deduped_inputs[@]}")
+fi
+
 if [[ -n "$output_path" && ${#inputs[@]} -ne 1 ]]; then
   echo "error: --output can be used only with a single input file." >&2
   exit 2
@@ -1366,7 +1783,7 @@ for in_file in "${inputs[@]}"; do
   fi
   if [[ "$in_file" == "$out_file" ]]; then
     if [[ "$REVIEW_PII" -eq 1 ]] && is_redacted_input "$in_file"; then
-      review_pii_candidates "$out_file" "$DEFAULT_REPLACEMENT"
+      review_pii_candidates "$out_file" "$PII_LIST_INPUT" "$REPLACE_ALL"
       continue
     fi
     echo "error: input and output must be different files: $in_file" >&2

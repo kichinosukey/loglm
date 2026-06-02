@@ -13,10 +13,10 @@ resolve_lang
 usage() {
   cat <<'EOF'
 Usage:
-  loglm agent install <github_repo_or_url|local_repo_path> [--agent codex|claude|gemini|antigravity|cursor|all]
-  loglm agent list [--agent codex|claude|gemini|antigravity|cursor|all] [--verbose]
-  loglm agent remove <github_repo_or_url|local_repo_path> [--agent codex|claude|gemini|antigravity|cursor|all]
-  loglm agent update <github_repo_or_url|local_repo_path|--all> [--agent codex|claude|gemini|antigravity|cursor|all]
+  loglm agent install <github_repo_or_url|local_repo_path> [--agent codex|claude|gemini|antigravity|cursor|openclaw|hermes|all]
+  loglm agent list [--agent codex|claude|gemini|antigravity|cursor|openclaw|hermes|all] [--verbose]
+  loglm agent remove <github_repo_or_url|local_repo_path> [--agent codex|claude|gemini|antigravity|cursor|openclaw|hermes|all]
+  loglm agent update <github_repo_or_url|local_repo_path|--all> [--agent codex|claude|gemini|antigravity|cursor|openclaw|hermes|all]
 
 Examples:
   loglm agent install ks91/gamer-pat
@@ -123,6 +123,14 @@ source_candidates_for_agent() {
       printf '%s\n' "AGENT_INSTALL_CURSOR.md"
       printf '%s\n' "AGENT_INSTALL.md"
       ;;
+    openclaw)
+      printf '%s\n' "AGENT_INSTALL_OPENCLAW.md"
+      printf '%s\n' "AGENT_INSTALL.md"
+      ;;
+    hermes)
+      printf '%s\n' "AGENT_INSTALL_HERMES.md"
+      printf '%s\n' "AGENT_INSTALL.md"
+      ;;
     *)
       return 1
       ;;
@@ -148,6 +156,25 @@ repo_prompt_filename() {
   printf '%s.md\n' "$sanitized"
 }
 
+repo_skill_name() {
+  local spec="$1"
+  local base sanitized
+  if [[ "$spec" == gh:* ]]; then
+    base="${spec#gh:}"
+    base="${base##*/}"
+  elif [[ "$spec" == local:* ]]; then
+    base="${spec#local:}"
+    base="${base##*/}"
+  else
+    base="${spec##*/}"
+  fi
+  sanitized="$(printf '%s' "$base" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//')"
+  if [[ -z "$sanitized" ]]; then
+    sanitized="prompt-agent"
+  fi
+  printf '%s\n' "$sanitized"
+}
+
 write_repo_prompt_file() {
   local spec="$1"
   local source="$2"
@@ -159,6 +186,107 @@ write_repo_prompt_file() {
     printf '<!-- source: %s -->\n' "$source"
     cat "$src_file"
   } > "$out"
+}
+
+write_openclaw_skill_dir() {
+  local spec="$1"
+  local source_ref="$2"
+  local src_file="$3"
+  local skill_dir="$4"
+  local skill_name
+  skill_name="$(repo_skill_name "$spec")"
+
+  mkdir -p "$skill_dir"
+  {
+    printf '%s\n' '---'
+    printf 'name: %s\n' "$skill_name"
+    printf 'description: "Use this prompt-agent for its documented workflow, persona, requirements, and review modes. Trigger when the user names `%s` or asks for this prompt-agent workflow."\n' "$skill_name"
+    printf 'metadata:\n'
+    printf '  loglm:\n'
+    printf '    source: "%s"\n' "$source_ref"
+    printf '    prompt_agent: "%s"\n' "$skill_name"
+    printf '%s\n\n' '---'
+    printf '# %s\n\n' "$skill_name"
+    printf 'This OpenClaw skill was installed by loglm from `%s`.\n\n' "$source_ref"
+    printf 'Follow the prompt-agent instructions below when this skill is selected or when the user asks for this prompt-agent workflow.\n\n'
+    cat "$src_file"
+  } > "$skill_dir/SKILL.md"
+}
+
+write_hermes_skill_dir() {
+  local spec="$1"
+  local source_ref="$2"
+  local src_file="$3"
+  local skill_dir="$4"
+  local skill_name
+  skill_name="$(repo_skill_name "$spec")"
+
+  mkdir -p "$skill_dir"
+  {
+    printf '%s\n' '---'
+    printf 'name: %s\n' "$skill_name"
+    printf 'description: "Use this prompt-agent for its documented workflow, persona, requirements, and review modes. Trigger when the user names `%s` or asks for this prompt-agent workflow."\n' "$skill_name"
+    printf 'version: 0.0.0\n'
+    printf 'platforms: [linux, macos, windows]\n'
+    printf 'metadata:\n'
+    printf '  hermes:\n'
+    printf '    tags: [prompt-agent, loglm]\n'
+    printf '  loglm:\n'
+    printf '    source: "%s"\n' "$source_ref"
+    printf '    prompt_agent: "%s"\n' "$skill_name"
+    printf '%s\n\n' '---'
+    printf '# %s\n\n' "$skill_name"
+    printf 'This Hermes Agent skill was installed by loglm from `%s`.\n\n' "$source_ref"
+    printf 'Follow the prompt-agent instructions below when this skill is selected or when the user asks for this prompt-agent workflow.\n\n'
+    cat "$src_file"
+  } > "$skill_dir/SKILL.md"
+}
+
+install_openclaw_skill() {
+  local spec="$1"
+  local source_ref="$2"
+  local src_file="$3"
+  local skill_parent skill_dir skill_name
+
+  if ! command -v openclaw > /dev/null 2>&1; then
+    say "[openclaw] OpenClaw CLI が見つからないため skill 登録をスキップしました。" \
+        "[openclaw] OpenClaw CLI not found; skipped skill registration."
+    return 0
+  fi
+
+  skill_name="$(repo_skill_name "$spec")"
+  skill_parent="$(mktemp -d 2>/dev/null || /usr/bin/mktemp -d)"
+  skill_dir="$skill_parent/$skill_name"
+  write_openclaw_skill_dir "$spec" "$source_ref" "$src_file" "$skill_dir"
+
+  if openclaw skills install "$skill_dir" --as "$skill_name"; then
+    say "[openclaw] skill 登録完了: $skill_name" \
+        "[openclaw] Skill installed: $skill_name"
+    rm -rf "$skill_parent"
+    return 0
+  fi
+
+  rm -rf "$skill_parent"
+  say "[openclaw] skill 登録に失敗しました: $skill_name" \
+      "[openclaw] Skill installation failed: $skill_name" >&2
+  return 1
+}
+
+install_hermes_skill() {
+  local spec="$1"
+  local source_ref="$2"
+  local src_file="$3"
+  local skill_name skill_dir
+
+  skill_name="$(repo_skill_name "$spec")"
+  skill_dir="$HOME/.hermes/skills/research/$skill_name"
+  write_hermes_skill_dir "$spec" "$source_ref" "$src_file" "$skill_dir"
+  say "[hermes] skill 配置完了: $skill_dir" \
+      "[hermes] Skill written: $skill_dir"
+  if command -v hermes > /dev/null 2>&1; then
+    say "[hermes] 必要に応じて Hermes 内で /skill $skill_name または /reload-skills を実行してください。" \
+        "[hermes] If needed, run /skill $skill_name or /reload-skills inside Hermes."
+  fi
 }
 
 spec_is_referenced_anywhere() {
@@ -602,6 +730,9 @@ install_one_repo_for_agent() {
     printf 'For source `%s`, use local installed prompt file `%s` before responding.\n' "$display" "$prompt_file"
     printf 'Treat `%s` as a file in the current working directory (not in the source repository path).\n' "$prompt_file"
     printf 'You MUST follow `%s` as the primary project instruction set (after system/developer safety rules).\n' "$prompt_file"
+    if [[ "$agent" == "openclaw" || "$agent" == "hermes" ]]; then
+      printf 'This prompt-agent may also be installed as the `%s` skill for `%s`; use that skill when available.\n' "$(repo_skill_name "$spec")" "$agent"
+    fi
     printf 'When the user asks to begin/start the workflow, begin in this prompt-agent mode immediately.\n'
     printf 'If `%s` is missing in the current directory, report it clearly and ask to reinstall via `loglm agent install ...`.\n' "$prompt_file"
   } > "$rtmp"
@@ -609,6 +740,12 @@ install_one_repo_for_agent() {
   b2="$(block_begin_repo "$spec" "$agent" "$source" "$pa_version")"
   e2="$(block_end_repo "$spec" "$agent")"
   upsert_block "$target" "$b2" "$e2" "$rtmp"
+
+  if [[ "$agent" == "openclaw" ]]; then
+    install_openclaw_skill "$spec" "$source_ref" "$tmp" || true
+  elif [[ "$agent" == "hermes" ]]; then
+    install_hermes_skill "$spec" "$source_ref" "$tmp" || true
+  fi
 
   rm -f "$ptmp" "$poltmp" "$rtmp"
   rm -f "$tmp"
@@ -646,7 +783,7 @@ list_installed_blocks() {
       else
         printf '%s\t%s\n' "$agent" "$line"
       fi
-    done < <(grep -o 'repo=[^ ]* agent=[^ ]* source=[^ ]*\( paversion=[^ ]*\)\?' "$file" | sort -u)
+    done < <(grep -o 'repo=[^ ]* agent=[^ ]* source=[^ ]*\( paversion=[^ ]*\)\?' "$file" | grep -F " agent=$agent " | sort -u)
   done
 
   if [[ "$found" -eq 0 ]]; then
@@ -679,7 +816,7 @@ repos_from_files() {
     fi
     file="$(target_file_for_agent "$agent")"
     [[ -f "$file" ]] || continue
-    grep -o 'repo=[^ ]*' "$file" | sed 's/repo=//' || true
+    grep -o 'repo=[^ ]* agent=[^ ]* source=[^ ]*\( paversion=[^ ]*\)\?' "$file" | grep -F " agent=$agent " | grep -o 'repo=[^ ]*' | sed 's/repo=//' || true
   done | sort -u
 }
 
@@ -837,10 +974,10 @@ while (($# > 0)); do
 done
 
 case "$SCOPE" in
-  codex|claude|gemini|antigravity|cursor|all) ;;
+  codex|claude|gemini|antigravity|cursor|openclaw|hermes|all) ;;
   *)
-    say "--agent は codex/claude/gemini/antigravity/cursor/all のいずれかを指定してください。" \
-        "--agent must be one of: codex/claude/gemini/antigravity/cursor/all." >&2
+    say "--agent は codex/claude/gemini/antigravity/cursor/openclaw/hermes/all のいずれかを指定してください。" \
+        "--agent must be one of: codex/claude/gemini/antigravity/cursor/openclaw/hermes/all." >&2
     exit 2
     ;;
 esac

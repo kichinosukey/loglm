@@ -11,12 +11,13 @@ TMP_WORK=""
 NODE_TMP=""
 DECODE_TMP=""
 CLAUDE_TMP=""
+EXPERIMENTAL_TMP=""
 E2E_DIR=""
 
 usage() {
   cat <<'EOF'
 Usage:
-  bash scripts/regression.sh [--e2e] [--repo <owner/repo>] [--agent codex|claude|gemini|all]
+  bash scripts/regression.sh [--e2e] [--repo <owner/repo>] [--agent codex|claude|gemini|openclaw|hermes|all]
 
 Options:
   --e2e                Run network E2E checks (install/list/update/remove).
@@ -81,7 +82,7 @@ while (($# > 0)); do
 done
 
 case "$E2E_AGENT" in
-  codex|claude|gemini|all) ;;
+  codex|claude|gemini|openclaw|hermes|all) ;;
   *)
     echo "invalid --agent: $E2E_AGENT" >&2
     exit 2
@@ -98,6 +99,12 @@ run_cmd bash -n \
   "$ROOT_DIR/uninstall.sh" \
   "$ROOT_DIR/setup/install-node.sh" \
   "$ROOT_DIR/setup/agent-install.sh"
+run_cmd bash -n \
+  "$ROOT_DIR/setup/agent-codex.sh" \
+  "$ROOT_DIR/setup/agent-claude.sh" \
+  "$ROOT_DIR/setup/agent-gemini.sh" \
+  "$ROOT_DIR/setup/agent-openclaw.sh" \
+  "$ROOT_DIR/setup/agent-hermes.sh"
 pass "shell syntax checks"
 
 # 2) Help output
@@ -112,7 +119,7 @@ pass "version output"
 
 # 3) loglm-decode overlap trimming
 DECODE_TMP="$(/usr/bin/mktemp -d)"
-trap 'rm -rf "$TMP_WORK" "$NODE_TMP" "$DECODE_TMP" "$CLAUDE_TMP"' EXIT
+trap 'rm -rf "$TMP_WORK" "$NODE_TMP" "$DECODE_TMP" "$CLAUDE_TMP" "$EXPERIMENTAL_TMP"' EXIT
 cat > "$DECODE_TMP/loglm-codex-log-20260403-010000-pid1.txt" <<'EOF'
 ===== loglm start [codex]: 2026-04-03 01:00:00 +0900 =====
 
@@ -295,6 +302,100 @@ rg -q '^❯ new prompt$' "$DECODE_TMP/loglm-claude-log-20260501-051000-pid6.deco
 rg -q '^new answer body that should remain after tail overlap$' "$DECODE_TMP/loglm-claude-log-20260501-051000-pid6.decoded.txt" || fail "decode should keep Claude session body for tail-only overlap"
 pass "decode ignores Claude tail-only overlap"
 
+cat > "$DECODE_TMP/loglm-claude-log-20260501-052000-pid7.txt" <<'EOF'
+===== loglm start [claude]: 2026-05-01 05:20:00 +0900 =====
+
+❯ しりとりしよう
+⏺ いいよ！じゃあ始めよう。
+しりとり
+「り」からどうぞ！
+❯ 倫理
+⏺ 倫理（りんり）
+「り」から！
+❯ ごま
+⏺ ごま（胡麻）
+「ま」から！
+❯ はじめよう
+⏺ 環境チェック完了！
+今回書く論文は何のためのもの？
+
+Resume this session with:
+claude --resume 11111111-1111-1111-1111-111111111111
+EOF
+cat > "$DECODE_TMP/loglm-claude-log-20260501-053000-pid8.txt" <<'EOF'
+===== loglm start [claude]: 2026-05-01 05:30:00 +0900 =====
+
+Claude Code v2.1.126
+❯ しりとりしよう
+⏺ いいよ！じゃあ始めよう。
+しりとり
+「り」からどうぞ！
+❯ 倫理
+⏺ 倫理（りんり）
+「り」から！
+❯ ごま
+⏺ ごま（胡麻）
+「ま」から！
+Read 1 file (ctrl+o to expand)
+❯ はじめよう
+extra redraw line not present in previous log
+⏺ 環境チェック完了！
+今回書く論文は何のためのもの？
+❯ /exit
+❯ Plonky
+
+Resume this session with:
+claude --resume 11111111-1111-1111-1111-111111111111
+EOF
+
+run_cmd "$ROOT_DIR/loglm-decode" "$DECODE_TMP/loglm-claude-log-20260501-052000-pid7.txt"
+run_cmd env LOGLM_DECODE_MIN_OVERLAP_LINES=4 LOGLM_DECODE_MIN_OVERLAP_CHARS=60 \
+  "$ROOT_DIR/loglm-decode" "$DECODE_TMP/loglm-claude-log-20260501-053000-pid8.txt"
+! rg -q '^❯ しりとりしよう$' "$DECODE_TMP/loglm-claude-log-20260501-053000-pid8.decoded.txt" || fail "decode should trim Claude leading replay with redraw variations"
+rg -q '^❯ /exit$' "$DECODE_TMP/loglm-claude-log-20260501-053000-pid8.decoded.txt" || fail "decode should keep first new Claude prompt after replay"
+rg -q '^❯ Plonky$' "$DECODE_TMP/loglm-claude-log-20260501-053000-pid8.decoded.txt" || fail "decode should keep later new Claude prompts after replay"
+pass "decode trims Claude leading replay with redraw variations"
+
+cat > "$DECODE_TMP/loglm-claude-log-20260501-054000-pid9.txt" <<'EOF'
+===== loglm start [claude]: 2026-05-01 05:40:00 +0900 =====
+
+❯ unrelated prompt
+⏺ unrelated response
+
+Resume this session with:
+claude --resume 22222222-2222-2222-2222-222222222222
+EOF
+cat > "$DECODE_TMP/loglm-claude-log-20260501-055000-pid10.txt" <<'EOF'
+===== loglm start [claude]: 2026-05-01 05:50:00 +0900 =====
+
+Claude Code v2.1.126
+❯ しりとりしよう
+⏺ いいよ！じゃあ始めよう。
+しりとり
+「り」からどうぞ！
+❯ 倫理
+⏺ 倫理（りんり）
+「り」から！
+❯ ごま
+⏺ ごま（胡麻）
+「ま」から！
+❯ はじめよう
+⏺ 環境チェック完了！
+今回書く論文は何のためのもの？
+❯ same session continued
+⏺ continued response
+
+Resume this session with:
+claude --resume 11111111-1111-1111-1111-111111111111
+EOF
+
+run_cmd "$ROOT_DIR/loglm-decode" "$DECODE_TMP/loglm-claude-log-20260501-054000-pid9.txt"
+run_cmd env LOGLM_DECODE_MIN_OVERLAP_LINES=4 LOGLM_DECODE_MIN_OVERLAP_CHARS=60 \
+  "$ROOT_DIR/loglm-decode" "$DECODE_TMP/loglm-claude-log-20260501-055000-pid10.txt"
+! rg -q '^❯ しりとりしよう$' "$DECODE_TMP/loglm-claude-log-20260501-055000-pid10.decoded.txt" || fail "decode should use Claude session ID to trim replay across intervening logs"
+rg -q '^❯ same session continued$' "$DECODE_TMP/loglm-claude-log-20260501-055000-pid10.decoded.txt" || fail "decode should keep new content after same-session replay"
+pass "decode prefers matching Claude session ID over intervening logs"
+
 cat > "$DECODE_TMP/loglm-gemini-log-20260403-223849-pid84024.txt" <<'EOF'
 ===== loglm start [gemini]: 2026-04-03 22:38:49 +0900 =====
  ▝▜▄    Gemini CLI v0.36.0
@@ -352,6 +453,56 @@ run_cmd "$ROOT_DIR/loglm-decode" "$DECODE_TMP/loglm-gemini-log-20260403-223900-p
 rg -q '^> /quit$' "$DECODE_TMP/loglm-gemini-log-20260403-223900-pid84025.decoded.txt" || fail "decode should keep actual Gemini slash commands"
 rg -q 'Agent powering down\. Goodbye!' "$DECODE_TMP/loglm-gemini-log-20260403-223900-pid84025.decoded.txt" || fail "decode should keep Gemini slash command results"
 pass "decode Gemini slash menu noise"
+
+cat > "$DECODE_TMP/loglm-openclaw-log-20260531-010000-pid31.txt" <<'EOF'
+===== loglm start [openclaw]: 2026-05-31 01:00:00 +0900 =====
+
+OpenClaw v0.0.0
+────────────────────────────────
+? for shortcuts
+local ready | idle
+agent main | session loglm-20260531-010000-pid31 | openai/gpt-5.5 | tokens 1k/200k
+loglm-20260531-010000-pid31
+?/200k
+> w
+> wr
+> write tests
+Thinking...
+I will inspect the project.
+EOF
+run_cmd "$ROOT_DIR/loglm-decode" "$DECODE_TMP/loglm-openclaw-log-20260531-010000-pid31.txt"
+! rg -q 'OpenClaw v0\.0\.0|\\? for shortcuts|Thinking|local ready|agent main|\\?/200k|loglm-20260531' "$DECODE_TMP/loglm-openclaw-log-20260531-010000-pid31.decoded.txt" || fail "decode should drop OpenClaw TUI noise"
+rg -q '^> write tests$' "$DECODE_TMP/loglm-openclaw-log-20260531-010000-pid31.decoded.txt" || fail "decode should keep final OpenClaw prompt"
+rg -q '^I will inspect the project\.$' "$DECODE_TMP/loglm-openclaw-log-20260531-010000-pid31.decoded.txt" || fail "decode should keep OpenClaw response text"
+pass "decode OpenClaw UI noise"
+
+cat > "$DECODE_TMP/loglm-hermes-log-20260531-011000-pid32.txt" <<'EOF'
+===== loglm start [hermes]: 2026-05-31 01:10:00 +0900 =====
+
+Hermes Agent v0.0.0
+────────────────────────────────
+? for shortcuts
+Available Tools
+browser: browser_back
+29 tools · 87 skills · /help for commands
+Welcome to Hermes Agent! Type your message or /help for commands.
+su
+mmarize logs
+● summarize logs
+⚕ gpt-5.5 │ ctx -- │ [░░░░░░░░░░] -- │ 1s │ ⏲ 0s
+⚕ ❯ msg=interrupt · /queue · /bg · /steer · Ctrl+C cancel
+> s
+> su
+> summarize logs
+Running...
+Summary follows.
+EOF
+run_cmd "$ROOT_DIR/loglm-decode" "$DECODE_TMP/loglm-hermes-log-20260531-011000-pid32.txt"
+! rg -q 'Hermes Agent v0\.0\.0|\\? for shortcuts|Running|Available Tools|Welcome to Hermes|ctx --|msg=interrupt|^mmarize logs$' "$DECODE_TMP/loglm-hermes-log-20260531-011000-pid32.decoded.txt" || fail "decode should drop Hermes TUI noise"
+rg -q '^> summarize logs$' "$DECODE_TMP/loglm-hermes-log-20260531-011000-pid32.decoded.txt" || fail "decode should keep final Hermes prompt"
+rg -q '^● summarize logs$' "$DECODE_TMP/loglm-hermes-log-20260531-011000-pid32.decoded.txt" || fail "decode should keep final Hermes confirmed prompt"
+rg -q '^Summary follows\.$' "$DECODE_TMP/loglm-hermes-log-20260531-011000-pid32.decoded.txt" || fail "decode should keep Hermes response text"
+pass "decode Hermes UI noise"
 
 cat > "$DECODE_TMP/timeline-a.decoded.txt" <<'EOF'
 ===== loglm start [codex]: 2026-04-04 10:31:51 +0900 =====
@@ -440,9 +591,45 @@ rg -q 'Login: \*\*\*1\*' "$DECODE_TMP/bulk.redacted.txt" || fail "replace-all sh
 rg -q 'Partner: \*\*\*2\*' "$DECODE_TMP/bulk.redacted.txt" || fail "replace-all should redact second-group candidates without prompting"
 pass "pii replace-all on grouped candidate input"
 
+cat > "$DECODE_TMP/pii-exclude.decoded.txt" <<'EOF'
+Nickname: いし
+Polite phrase: お願いします
+EOF
+cat > "$DECODE_TMP/pii-exclude-candidates.txt" <<'EOF'
+いし
+-願いし
+EOF
+
+"$ROOT_DIR/loglm-decode" --review-pii --replace-all "$DECODE_TMP/pii-exclude-candidates.txt" "$DECODE_TMP/pii-exclude.decoded.txt" > /tmp/loglm-test-pii-exclude.out 2> /tmp/loglm-test-pii-exclude.err
+rg -q 'Nickname: \*\*\*1\*' "$DECODE_TMP/pii-exclude.redacted.txt" || fail "pii exclude should still redact standalone candidate values"
+rg -q 'Polite phrase: お願いします' "$DECODE_TMP/pii-exclude.redacted.txt" || fail "pii exclude should keep candidate values inside excluded strings"
+rg -Fq 'excludes: 願いし' /tmp/loglm-test-pii-exclude.out || fail "pii review should show group exclusions"
+pass "pii group exclusions"
+
+cat > "$DECODE_TMP/loglm-claude-log-20260501-060000-pid12.decoded.txt" <<'EOF'
+===== loglm start [claude]: 2026-05-01 06:00:00 +0900 =====
+Name: Kenji Saito
+Content: this decoded source should win
+EOF
+cat > "$DECODE_TMP/loglm-claude-log-20260501-060000-pid12.redacted.txt" <<'EOF'
+stale redacted file
+EOF
+cat > "$DECODE_TMP/loglm-claude-log-20260501-060000-pid12.txt" <<'EOF'
+raw source should not overwrite decoded redaction
+EOF
+
+"$ROOT_DIR/loglm-decode" --review-pii --replace-all "$DECODE_TMP/pii-candidates.txt" \
+  "$DECODE_TMP/loglm-claude-log-20260501-060000-pid12.decoded.txt" \
+  "$DECODE_TMP/loglm-claude-log-20260501-060000-pid12.redacted.txt" \
+  "$DECODE_TMP/loglm-claude-log-20260501-060000-pid12.txt" > /tmp/loglm-test-pii-dedup.out 2> /tmp/loglm-test-pii-dedup.err
+rg -q 'Name: \*\*\*1\*' "$DECODE_TMP/loglm-claude-log-20260501-060000-pid12.redacted.txt" || fail "pii review should redact from decoded source when duplicate outputs are present"
+rg -q 'Content: this decoded source should win' "$DECODE_TMP/loglm-claude-log-20260501-060000-pid12.redacted.txt" || fail "pii review should not overwrite decoded redaction with raw input"
+! rg -q 'stale redacted file|raw source should not overwrite' "$DECODE_TMP/loglm-claude-log-20260501-060000-pid12.redacted.txt" || fail "pii review should skip duplicate redacted/raw inputs for the same output"
+pass "pii review deduplicates mixed input variants"
+
 # 4) install-node runtime behavior for missing NVM_DIR
 NODE_TMP="$(/usr/bin/mktemp -d)"
-trap 'rm -rf "$TMP_WORK" "$NODE_TMP" "$DECODE_TMP" "$CLAUDE_TMP"' EXIT
+trap 'rm -rf "$TMP_WORK" "$NODE_TMP" "$DECODE_TMP" "$CLAUDE_TMP" "$EXPERIMENTAL_TMP"' EXIT
 mkdir -p "$NODE_TMP/home" "$NODE_TMP/bin"
 
 cat > "$NODE_TMP/bin/curl" <<'EOF'
@@ -506,7 +693,7 @@ pass "invalid repo check"
 
 # 7) Claude resume detection with Claude Code project path encoding
 CLAUDE_TMP="$(/usr/bin/mktemp -d)"
-trap 'rm -rf "$TMP_WORK" "$NODE_TMP" "$DECODE_TMP" "$CLAUDE_TMP"' EXIT
+trap 'rm -rf "$TMP_WORK" "$NODE_TMP" "$DECODE_TMP" "$CLAUDE_TMP" "$EXPERIMENTAL_TMP"' EXIT
 CLAUDE_WORK="$CLAUDE_TMP/Mobile Documents/iCloud~com~omz-software~Pythonista3/Documents"
 mkdir -p "$CLAUDE_WORK" "$CLAUDE_TMP/home" "$CLAUDE_TMP/bin"
 printf 'claude\n' > "$CLAUDE_WORK/.loglm_agent"
@@ -548,9 +735,69 @@ rg -q 'Decode raw logs with: `loglm-decode logs/\*`' "$CLAUDE_WORK/CLAUDE.md" ||
 rg -q 'Build a chronological overview with: `loglm-timeline logs/\*\.decoded\.txt`' "$CLAUDE_WORK/CLAUDE.md" || fail "CLAUDE.md should mention loglm-timeline"
 pass "claude resume detection handles spaces and tildes in project path"
 
+# 7b) Experimental agent launch commands
+EXPERIMENTAL_TMP="$(/usr/bin/mktemp -d)"
+trap 'rm -rf "$TMP_WORK" "$NODE_TMP" "$DECODE_TMP" "$CLAUDE_TMP" "$EXPERIMENTAL_TMP"' EXIT
+EXPERIMENTAL_WORK="$EXPERIMENTAL_TMP/work"
+mkdir -p "$EXPERIMENTAL_WORK" "$EXPERIMENTAL_TMP/home" "$EXPERIMENTAL_TMP/bin"
+
+cat > "$EXPERIMENTAL_TMP/bin/script" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" > "$LOGLM_TEST_SCRIPT_ARGS"
+exit 0
+EOF
+chmod +x "$EXPERIMENTAL_TMP/bin/script"
+
+cat > "$EXPERIMENTAL_TMP/bin/openclaw" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+chmod +x "$EXPERIMENTAL_TMP/bin/openclaw"
+
+cat > "$EXPERIMENTAL_TMP/bin/hermes" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+chmod +x "$EXPERIMENTAL_TMP/bin/hermes"
+
+(
+  cd "$EXPERIMENTAL_WORK"
+  printf 'openclaw\n' > .loglm_agent
+  HOME="$EXPERIMENTAL_TMP/home" \
+    PATH="$EXPERIMENTAL_TMP/bin:$PATH" \
+    LOGLM_TEST_SCRIPT_ARGS="$EXPERIMENTAL_TMP/openclaw-script-args.out" \
+    "$ROOT_DIR/loglm" --new >/tmp/loglm-test-openclaw-launch.out 2>/tmp/loglm-test-openclaw-launch.err
+)
+rg -q 'openclaw tui --local --session loglm-' "$EXPERIMENTAL_TMP/openclaw-script-args.out" || fail "OpenClaw launch should use TUI local mode and a new session key"
+rg -q 'loglm Platform Notes' "$EXPERIMENTAL_WORK/AGENTS.md" || fail "OpenClaw launch should create AGENTS.md runtime notes"
+
+(
+  cd "$EXPERIMENTAL_WORK"
+  printf 'hermes\n' > .loglm_agent
+  HOME="$EXPERIMENTAL_TMP/home" \
+    PATH="$EXPERIMENTAL_TMP/bin:$PATH" \
+    LOGLM_TEST_SCRIPT_ARGS="$EXPERIMENTAL_TMP/hermes-script-args.out" \
+    "$ROOT_DIR/loglm" >/tmp/loglm-test-hermes-launch.out 2>/tmp/loglm-test-hermes-launch.err
+)
+rg -q '^.*hermes$' "$EXPERIMENTAL_TMP/hermes-script-args.out" || fail "Hermes launch should start normally when no previous session exists"
+! rg -q 'hermes --continue' "$EXPERIMENTAL_TMP/hermes-script-args.out" || fail "Hermes launch should not continue when no previous session exists"
+
+mkdir -p "$EXPERIMENTAL_TMP/home/.hermes/sessions"
+touch "$EXPERIMENTAL_TMP/home/.hermes/sessions/20260531_191136_d1cd26"
+(
+  cd "$EXPERIMENTAL_WORK"
+  printf 'hermes\n' > .loglm_agent
+  HOME="$EXPERIMENTAL_TMP/home" \
+    PATH="$EXPERIMENTAL_TMP/bin:$PATH" \
+    LOGLM_TEST_SCRIPT_ARGS="$EXPERIMENTAL_TMP/hermes-script-args.out" \
+    "$ROOT_DIR/loglm" >/tmp/loglm-test-hermes-launch-resume.out 2>/tmp/loglm-test-hermes-launch-resume.err
+)
+rg -q 'hermes --continue' "$EXPERIMENTAL_TMP/hermes-script-args.out" || fail "Hermes launch should resume when a previous session exists"
+pass "experimental agent launch commands"
+
 # 8) Managed block list/remove behavior
 TMP_WORK="$(/usr/bin/mktemp -d)"
-trap 'rm -rf "$TMP_WORK" "$NODE_TMP" "$DECODE_TMP" "$CLAUDE_TMP"' EXIT
+trap 'rm -rf "$TMP_WORK" "$NODE_TMP" "$DECODE_TMP" "$CLAUDE_TMP" "$EXPERIMENTAL_TMP"' EXIT
 cd "$TMP_WORK"
 
 cat > AGENTS.md <<'EOF'
@@ -602,6 +849,43 @@ pass "local source install works"
 rg -q "prompt_agent_version: 9.9.9" /tmp/loglm-test-list-verbose.out || fail "verbose list should show prompt-agent version"
 pass "agent list --verbose shows prompt-agent version"
 
+cat > "$LOCAL_REPO/AGENT_INSTALL_OPENCLAW.md" <<'EOF'
+# OpenClaw Prompt
+
+## Non-Negotiable Rules
+- Test OpenClaw-specific prompt install.
+EOF
+cat > "$LOCAL_REPO/AGENT_INSTALL_HERMES.md" <<'EOF'
+# Hermes Prompt
+
+## Non-Negotiable Rules
+- Test Hermes-specific prompt install.
+EOF
+
+cat > "$TMP_WORK/openclaw" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" > "$OPENCLAW_SKILLS_ARGS_OUT"
+if [[ "$1" == "skills" && "$2" == "install" ]]; then
+  cp "$3/SKILL.md" "$OPENCLAW_SKILL_OUT"
+fi
+exit 0
+EOF
+chmod +x "$TMP_WORK/openclaw"
+
+run_cmd env LOGLM_AGENT_INSTALL_NO_LAUNCH=1 PATH="$TMP_WORK:$PATH" OPENCLAW_SKILLS_ARGS_OUT="$TMP_WORK/openclaw-skills-args.out" OPENCLAW_SKILL_OUT="$TMP_WORK/openclaw-SKILL.md" "$ROOT_DIR/loglm" agent install "$LOCAL_REPO" --agent openclaw --force
+LOCAL_REPO_CANON="$(cd "$LOCAL_REPO" && pwd -P)"
+rg -q "repo=local:$LOCAL_REPO_CANON agent=openclaw source=AGENT_INSTALL_OPENCLAW.md" AGENTS.md || fail "OpenClaw prompt-agent block should be installed into AGENTS.md"
+rg -q "skills install .*/local-agent-src --as local-agent-src" "$TMP_WORK/openclaw-skills-args.out" || fail "OpenClaw prompt-agent install should call openclaw skills install"
+rg -q '^name: local-agent-src$' "$TMP_WORK/openclaw-SKILL.md" || fail "OpenClaw generated SKILL.md should include skill name"
+rg -q 'Test OpenClaw-specific prompt install' "$TMP_WORK/openclaw-SKILL.md" || fail "OpenClaw generated SKILL.md should include prompt-agent content"
+HERMES_HOME="$TMP_WORK/hermes-home"
+run_cmd env LOGLM_AGENT_INSTALL_NO_LAUNCH=1 HOME="$HERMES_HOME" "$ROOT_DIR/loglm" agent install "$LOCAL_REPO" --agent hermes --force
+rg -q "repo=local:$LOCAL_REPO_CANON agent=hermes source=AGENT_INSTALL_HERMES.md" AGENTS.md || fail "Hermes prompt-agent block should be installed into AGENTS.md"
+[[ -f "$HERMES_HOME/.hermes/skills/research/local-agent-src/SKILL.md" ]] || fail "Hermes prompt-agent install should write SKILL.md"
+rg -q '^name: local-agent-src$' "$HERMES_HOME/.hermes/skills/research/local-agent-src/SKILL.md" || fail "Hermes generated SKILL.md should include skill name"
+rg -q 'Test Hermes-specific prompt install' "$HERMES_HOME/.hermes/skills/research/local-agent-src/SKILL.md" || fail "Hermes generated SKILL.md should include prompt-agent content"
+pass "experimental agent prompt install works"
+
 # 9) Update validation
 set +e
 "$ROOT_DIR/loglm" agent update > /tmp/loglm-test-update-empty.out 2> /tmp/loglm-test-update-empty.err
@@ -617,7 +901,7 @@ pass "agent update --all on empty set"
 if [[ "$RUN_E2E" -eq 1 ]]; then
   # 10) Network E2E: install/list/update/remove cycle against real GitHub repo
   E2E_DIR="$(/usr/bin/mktemp -d)"
-  trap 'rm -rf "$TMP_WORK" "$NODE_TMP" "$DECODE_TMP" "$CLAUDE_TMP" "$E2E_DIR"' EXIT
+  trap 'rm -rf "$TMP_WORK" "$NODE_TMP" "$DECODE_TMP" "$CLAUDE_TMP" "$EXPERIMENTAL_TMP" "$E2E_DIR"' EXIT
   cd "$E2E_DIR"
 
   run_cmd env LOGLM_AGENT_INSTALL_NO_LAUNCH=1 LOGLM_CODING_AGENT=codex "$ROOT_DIR/loglm" agent install "$E2E_REPO" --agent "$E2E_AGENT"
