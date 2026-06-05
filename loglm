@@ -41,6 +41,8 @@ Options:
         antigravity : --dangerously-skip-permissions
         cursor      : N/A
         openclaw/hermes: no dangerous-mode flag is passed by loglm yet
+  --evidence
+      After session ends, seal an Evidence Bundle (requires loglm-evidence).
   -h, --help
       Show this help.
   -v, --version
@@ -49,6 +51,8 @@ Options:
 Subcommands:
   agent ...
       Manage prompt-agent blocks in AGENTS.md / CLAUDE.md / GEMINI.md / ANTIGRAVITY.md / CURSOR.md.
+  evidence seal|verify|publish|status ...
+      Delegate to loglm-evidence (Evidence Bundle / CommitDigest).
 EOF
 }
 
@@ -224,6 +228,15 @@ select_agent() {
   done
 }
 
+if (($# > 0)) && [[ "$1" == "evidence" ]]; then
+  shift
+  if ! command -v loglm-evidence >/dev/null 2>&1; then
+    echo "Error: loglm-evidence not found. Install from the loglm-evidence package (pip install -e .)." >&2
+    exit 1
+  fi
+  exec loglm-evidence "$@"
+fi
+
 if (($# > 0)) && [[ "$1" == "agent" ]]; then
   shift
   if (($# == 0)); then
@@ -259,9 +272,20 @@ CHOOSE_RESUME=0
 DANGEROUS_MODE=0
 CHOOSE_AGENT=0
 DAILY_LOG=0
+EVIDENCE_MODE=0
+AUTO_SEAL=0
+
+EVIDENCE_CFG="${HOME}/.config/loglm/evidence.yaml"
+if [[ -f "$EVIDENCE_CFG" ]] && grep -Eq '^[[:space:]]*auto_seal:[[:space:]]*true' "$EVIDENCE_CFG"; then
+  AUTO_SEAL=1
+fi
 
 while (($# > 0)); do
   case "$1" in
+    --evidence)
+      EVIDENCE_MODE=1
+      shift
+      ;;
     --new)
       FORCE_NEW=1
       shift
@@ -419,28 +443,58 @@ case "$AGENT" in
     ;;
 esac
 
-if is_running_under_script; then
-  exec "${AGENT_CMD[@]}"
-fi
+seal_if_enabled() {
+  if [[ "$EVIDENCE_MODE" -eq 0 && "$AUTO_SEAL" -eq 0 ]]; then
+    return 0
+  fi
+  if ! command -v loglm-evidence >/dev/null 2>&1; then
+    echo "Warning: loglm-evidence not found; skipping seal." >&2
+    return 0
+  fi
+  local seal_end
+  seal_end="$(date '+%Y-%m-%d %H:%M:%S %z')"
+  if ! loglm-evidence seal \
+    --log-file "$LOG_FILE" \
+    --work-dir "$WORK_DIR" \
+    --agent "$AGENT" \
+    --started-at "$RUN_START_LOCAL" \
+    --ended-at "$seal_end" \
+    --loglm-version "$LOGLM_VERSION"; then
+    echo "Warning: evidence seal failed." >&2
+  fi
+}
 
-RUN_START_LOCAL="$(date '+%Y-%m-%d %H:%M:%S %z')"
-{
-  printf '\n===== loglm start [%s]: %s =====\n' "$AGENT" "$RUN_START_LOCAL"
-} >> "$LOG_FILE"
+run_with_evidence_hook() {
+  local exit_code=0
 
-SCRIPT_OPTS=(-q -a)
-SCRIPT_HELP="$(script -h 2>&1 || true)"
+  if is_running_under_script; then
+    exec "${AGENT_CMD[@]}"
+  fi
 
-if printf '%s' "$SCRIPT_HELP" | grep -Eq -- '(^|[[:space:]])-F([,[:space:]]|$)'; then
-  SCRIPT_OPTS+=(-F)
-elif printf '%s' "$SCRIPT_HELP" | grep -Eq -- '(^|[[:space:]])-f([,[:space:]]|$)'; then
-  SCRIPT_OPTS+=(-f)
-fi
+  RUN_START_LOCAL="$(date '+%Y-%m-%d %H:%M:%S %z')"
+  {
+    printf '\n===== loglm start [%s]: %s =====\n' "$AGENT" "$RUN_START_LOCAL"
+  } >> "$LOG_FILE"
 
-if printf '%s' "$SCRIPT_HELP" | grep -Eq -- '(^|[[:space:]])-c,|--command([[:space:]]|=)'; then
-  AGENT_CMD_STRING="$(printf '%q ' "${AGENT_CMD[@]}")"
-  AGENT_CMD_STRING="${AGENT_CMD_STRING% }"
-  exec script "${SCRIPT_OPTS[@]}" "$LOG_FILE" -c "exec $AGENT_CMD_STRING"
-else
-  exec script "${SCRIPT_OPTS[@]}" "$LOG_FILE" "${AGENT_CMD[@]}"
-fi
+  SCRIPT_OPTS=(-q -a)
+  SCRIPT_HELP="$(script -h 2>&1 || true)"
+
+  if printf '%s' "$SCRIPT_HELP" | grep -Eq -- '(^|[[:space:]])-F([,[:space:]]|$)'; then
+    SCRIPT_OPTS+=(-F)
+  elif printf '%s' "$SCRIPT_HELP" | grep -Eq -- '(^|[[:space:]])-f([,[:space:]]|$)'; then
+    SCRIPT_OPTS+=(-f)
+  fi
+
+  if printf '%s' "$SCRIPT_HELP" | grep -Eq -- '(^|[[:space:]])-c,|--command([[:space:]]|=)'; then
+    AGENT_CMD_STRING="$(printf '%q ' "${AGENT_CMD[@]}")"
+    AGENT_CMD_STRING="${AGENT_CMD_STRING% }"
+    script "${SCRIPT_OPTS[@]}" "$LOG_FILE" -c "exec $AGENT_CMD_STRING" || exit_code=$?
+  else
+    script "${SCRIPT_OPTS[@]}" "$LOG_FILE" "${AGENT_CMD[@]}" || exit_code=$?
+  fi
+
+  seal_if_enabled
+  exit "$exit_code"
+}
+
+run_with_evidence_hook

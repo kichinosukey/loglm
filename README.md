@@ -80,6 +80,19 @@ The managed instruction notes tell the coding agent that it may be running throu
 where logs are stored, and how to use `loglm-decode` and `loglm-timeline` when asked to
 inspect previous work.
 
+### Evidence Bundles (optional)
+
+Install the separate `loglm-evidence` package (`pip install -e /path/to/loglm-evidence`), then:
+
+```bash
+loglm --evidence          # seal Evidence Bundle after session ends
+loglm evidence verify     # tamper check (exit 2 on digest mismatch)
+loglm evidence publish    # push digest only to your public GitHub repo
+```
+
+Configure `~/.config/loglm/evidence.yaml`. Design spec:
+`docs/superpowers/specs/2026-06-05-loglm-evidence-bundle-design.md`.
+
 If the selected agent command is missing (`codex`, `claude`, `gemini`, `openclaw`, or `hermes`),
 `loglm` prompts and runs an installer from `~/.local/share/loglm/setup`.
 Before agent install, `doctor.sh` runs base checks (such as `script` command availability).

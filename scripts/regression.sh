@@ -922,5 +922,22 @@ if [[ "$RUN_E2E" -eq 1 ]]; then
   pass "e2e list after remove"
 fi
 
+# Evidence subcommand delegation
+EVIDENCE_TMP="$(mktemp -d)"
+EVIDENCE_MOCK="$EVIDENCE_TMP/mock-loglm-evidence"
+EVIDENCE_BIN="$EVIDENCE_TMP/bin"
+mkdir -p "$EVIDENCE_BIN"
+cat > "$EVIDENCE_MOCK" <<'MOCK'
+#!/usr/bin/env bash
+printf 'mock:%s\n' "$*"
+exit 0
+MOCK
+chmod +x "$EVIDENCE_MOCK"
+ln -sf "$EVIDENCE_MOCK" "$EVIDENCE_BIN/loglm-evidence"
+EVIDENCE_OUT="$(env PATH="$EVIDENCE_BIN:$PATH" "$ROOT_DIR/loglm" evidence status 2>&1)"
+[[ "$EVIDENCE_OUT" == *"mock:status"* ]] || fail "loglm evidence should delegate to loglm-evidence"
+pass "evidence subcommand delegates to loglm-evidence"
+rm -rf "$EVIDENCE_TMP"
+
 printf 'loglm regression passed\n' | tee -a "$LOG_FILE"
 printf 'log: %s\n' "$LOG_FILE"
