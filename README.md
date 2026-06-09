@@ -82,16 +82,15 @@ inspect previous work.
 
 ### Evidence Bundles (optional)
 
-Install the separate `loglm-evidence` package (`pip install -e /path/to/loglm-evidence`), then:
+Install the separate [`loglm-evidence`](https://github.com/kichinosukey/loglm-evidence) package (`pip install -e /path/to/loglm-evidence`), then:
 
 ```bash
 loglm --evidence          # seal Evidence Bundle after session ends
 loglm evidence verify     # tamper check (exit 2 on digest mismatch)
-loglm evidence publish    # push digest only to your public GitHub repo
+loglm evidence publish    # push digest only to your GitHub repo
 ```
 
-Configure `~/.config/loglm/evidence.yaml`. Design spec:
-`docs/superpowers/specs/2026-06-05-loglm-evidence-bundle-design.md`.
+Configure `~/.config/loglm/evidence.yaml`. This fork delegates to `loglm-evidence`; [upstream loglm](https://github.com/ks91/loglm) does not include this integration yet.
 
 If the selected agent command is missing (`codex`, `claude`, `gemini`, `openclaw`, or `hermes`),
 `loglm` prompts and runs an installer from `~/.local/share/loglm/setup`.
